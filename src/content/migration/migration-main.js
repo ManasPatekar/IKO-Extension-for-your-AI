@@ -1,5 +1,7 @@
 "use strict";
 
+const IKOComposer = require("../composer-io.js");
+
 (function () {
     let migrationPanel = null;
 
@@ -106,7 +108,18 @@
             destinations: direction.destinations,
             directionLabel: `${direction.sourceName} → ${direction.destinationName}`,
             onListLibrary: listLibrary,
-            onLoadLibrary: loadLibraryItem,
+            onLoadLibrary: async (id) => {
+                const loaded = await loadLibraryItem(id);
+                // Saved entries created before packaging may have package:null.
+                // Rebuild an openable package and remember it so "Open destination"
+                // works after a Load (lastResult is otherwise only set by Prepare).
+                const pkg = loaded?.package?.session
+                    ? loaded.package
+                    : { session: loaded?.session, source: loaded?.session?.source || null };
+                lastResult = { migrationPackage: pkg };
+                try { window.IKO?.logger?.info?.("Library", "loaded", { id, messages: pkg?.session?.messages?.length || 0 }); } catch { /* ignore */ }
+                return { session: loaded?.session, package: pkg };
+            },
             onDeleteLibrary: deleteLibraryItem,
             onSaveLibrary: saveLibraryItem,
             onDestinationChange: (newDest) => {
@@ -132,9 +145,13 @@
                 return { session: result.session, migrationPackage: result.migrationPackage };
             },
             onOpenDestination: async (_destination, migrationPackage) => {
-                if (!lastResult?.migrationPackage) throw new Error("Migration package is not ready.");
-                const result = await engine.prepareDestination(migrationPackage);
+                // Use the package the UI hands us — freshly prepared OR loaded
+                // from the saved library — falling back to the last prepared one.
+                const pkg = migrationPackage?.session ? migrationPackage : lastResult?.migrationPackage;
+                if (!pkg?.session) throw new Error("Migration package is not ready — click Prepare Migration or load a saved session first.");
+                const result = await engine.prepareDestination(pkg);
                 if (!result.success) throw result.error;
+                lastResult = { migrationPackage: pkg };
                 return result;
             },
             onClose: () => { migrationPanel = null; }
@@ -147,83 +164,9 @@
         migrationPanel = null;
     }
 
-    function deepQueryAll(selector) {
-        const out = [];
-        const seen = new Set();
-        const pushAll = (root) => {
-            try {
-                for (const n of root.querySelectorAll(selector)) {
-                    if (!seen.has(n)) { seen.add(n); out.push(n); }
-                }
-            } catch { /* bad selector for this root */ }
-            // one recursive shadow pass (Gemini rich-textarea, etc.)
-            try {
-                for (const n of root.querySelectorAll("*")) {
-                    const sr = n.shadowRoot;
-                    if (sr) pushAll(sr);
-                    if (out.length > 200) break;
-                }
-            } catch { /* ignore */ }
-        };
-        pushAll(document);
-        return out;
-    }
-
     function findComposer() {
-        const selectors = [
-            "#prompt-textarea",
-            "[data-testid='chat-input']",
-            ".ProseMirror",
-            "div.ProseMirror[contenteditable='true']",
-            "rich-textarea",
-            "rich-textarea [contenteditable='true']",
-            "[aria-label*='prompt' i]",
-            "[aria-label*='Ask' i]",
-            "[placeholder*='Ask' i]",
-            ".ql-editor[contenteditable='true']",
-            "div[role='textbox']",
-            "fieldset [contenteditable='true']",
-            "form textarea",
-            "form [contenteditable='true']",
-            "form [role='textbox']",
-            "textarea",
-            "[contenteditable='true']",
-            "[role='textbox']"
-        ];
-        const candidates = [];
-        for (const selector of selectors) {
-            try {
-                deepQueryAll(selector).forEach(element => {
-                    const rect = element.getBoundingClientRect?.() || { width: 0, height: 0, bottom: -1, top: 9999 };
-                    // Gemini bar is short (~50px) — lower thresholds vs ChatGPT
-                    if (rect.width > 180 && rect.height > 18 && rect.bottom > 0 && rect.top < innerHeight) {
-                        const editable = element.getAttribute?.("contenteditable") === "true" || element.tagName === "TEXTAREA" || element.tagName === "RICH-TEXTAREA";
-                        candidates.push({ element, editable, bottom: rect.bottom, area: rect.width * rect.height, selector });
-                    } else if (rect.width === 0 && rect.height === 0 && (element.tagName === "RICH-TEXTAREA" || /prompt|ask/i.test(element.getAttribute?.("aria-label") || ""))) {
-                        // shadow host with zero rect — keep inner editable instead
-                        try {
-                            const inner = element.shadowRoot?.querySelector?.("[contenteditable='true'], div[role='textbox']");
-                            if (inner) candidates.push({ element: inner, editable: true, bottom: innerHeight - 100, area: 50000, selector: selector + "::shadow" });
-                        } catch { /* ignore */ }
-                    }
-                });
-            } catch { /* bad selector */ }
-        }
-        // Last resort on Gemini: box labelled "Ask Gemini"
-        if (!candidates.length) {
-            try {
-                const labelled = document.querySelector("[aria-label*='Ask Gemini' i], [placeholder*='Ask Gemini' i]");
-                if (labelled) {
-                    const inner = labelled.shadowRoot?.querySelector?.("[contenteditable]") || labelled.querySelector?.("[contenteditable]") || labelled;
-                    candidates.push({ element: inner, editable: true, bottom: innerHeight - 100, area: 50000, selector: "ask-gemini-fallback" });
-                }
-            } catch { /* ignore */ }
-        }
-        try { window.IKO?.logger?.info?.("Migration", "composer scan", { found: candidates.length, sels: candidates.slice(0, 4).map(c => c.selector) }); } catch { /* ignore */ }
-        if (!candidates.length) return null;
-        // Editable nodes first, then lowest on screen, then largest
-        candidates.sort((a, b) => (b.editable - a.editable) || (b.bottom - a.bottom) || (b.area - a.area));
-        return candidates[0].element;
+        // Delegate to the shared, framework-aware writer (composer-io.js).
+        return IKOComposer.findComposer();
     }
 
     function sessionToPrompt(session, excluded) {
@@ -317,30 +260,7 @@
     function setComposerValue(element, value) {
         if (!element) return false;
         try { window.IKO?.logger?.info?.("Migration", "inserting into composer", { tag: element.tagName, cls: String(element.className || "").slice(0, 120) }); } catch { /* ignore */ }
-        element.focus();
-        // Claude ProseMirror needs execCommand / beforeinput, plain textContent alone won't trigger it
-        const isProseMirror = element.classList?.contains("ProseMirror") || element.querySelector?.(".ProseMirror");
-        const target = (isProseMirror && element.classList?.contains("ProseMirror")) ? element : (element.querySelector?.(".ProseMirror") || element);
-        try { target.focus(); } catch { /* ignore */ }
-        if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
-            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-            setter?.call(target, value);
-        } else {
-            // Clear placeholder <p><br></p> that ProseMirror leaves behind
-            try {
-                target.innerHTML = "";
-                // insertText preserves undo stack and fires TipTap listeners
-                if (!document.execCommand("insertText", false, value)) {
-                    target.textContent = value;
-                }
-            } catch {
-                target.textContent = value;
-            }
-        }
-        try { target.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: value })); } catch { /* ignore */ }
-        target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
-        target.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
+        return IKOComposer.writeComposerText(element, value);
     }
 
     function showPendingMigration(packageData) {

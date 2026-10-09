@@ -1,5 +1,8 @@
 "use strict";
 
+import IKOComposer from "./composer-io.js";
+try { window.IKOComposer = window.IKOComposer || IKOComposer; } catch { /* ignore */ }
+
 window.IKO = window.IKO || {};
 
 window.IKO.ui = {
@@ -8,15 +11,40 @@ window.IKO.ui = {
 
   /*
    * ==========================================
-   * FIXED HUD POSITION
+   * COMPOSER-DOCKED HUD POSITION
    * ==========================================
    *
-   * The HUD is intentionally NOT attached to
-   * the AI composer.
+   * The HUD sits fixed on the AI text box,
+   * Tally-style: just above the composer,
+   * right-aligned to it. Same card UI —
+   * only the anchor changed.
    *
-   * This prevents it from appearing in the
-   * middle of the chat box.
+   * A user drag still wins (pinned spot).
    */
+
+  // Locate the site's chat composer box.
+  composerBox() {
+    try {
+      const el =
+        window.IKOComposer?.findComposer?.();
+      if (!el || !el.getBoundingClientRect) {
+        return null;
+      }
+      const r = el.getBoundingClientRect();
+      if (!r || r.width < 120 || r.height < 10) {
+        return null;
+      }
+      if (
+        r.bottom <= 0 ||
+        r.top >= window.innerHeight
+      ) {
+        return null;
+      }
+      return r;
+    } catch {
+      return null;
+    }
+  },
 
   position() {
     const hud =
@@ -35,22 +63,52 @@ window.IKO.ui = {
       return;
     }
 
-    /*
-     * Fixed bottom-right position.
-     *
-     * Increase bottom if you want it
-     * further away from the composer.
-     */
     hud.style.position = "fixed";
+    hud.style.zIndex = "2147483640";
 
+    const box = this.composerBox();
+
+    if (box) {
+      /*
+       * Dock onto the text box: HUD bottom
+       * sits just above the composer top,
+       * right edges aligned.
+       */
+      const w = hud.offsetWidth || 280;
+      const h = hud.offsetHeight || 200;
+      const gap = 10;
+
+      let left = Math.round(box.right - w);
+      left = Math.min(
+        Math.max(8, left),
+        Math.max(8, window.innerWidth - w - 8)
+      );
+
+      let top = Math.round(box.top - h - gap);
+      if (top < 8) {
+        // No room above — drop just below the box instead.
+        top = Math.min(
+          Math.round(box.bottom + gap),
+          Math.max(8, window.innerHeight - h - 8)
+        );
+      }
+
+      hud.style.left = `${left}px`;
+      hud.style.top = `${top}px`;
+      hud.style.right = "auto";
+      hud.style.bottom = "auto";
+      return;
+    }
+
+    /*
+     * Fallback dock when no composer is
+     * found (unknown page layout).
+     */
     hud.style.right = "24px";
     hud.style.bottom = "105px";
 
     hud.style.left = "auto";
     hud.style.top = "auto";
-
-    hud.style.zIndex =
-      "2147483640";
   },
 
   /*
@@ -301,12 +359,25 @@ window.IKO.ui = {
       bot = document.createElement("button");
       bot.id = "iko-bot";
       bot.type = "button";
-      bot.title = "IKO — drag to move, click to show/hide";
+      bot.title = "IKO — click to show/hide";
       bot.innerHTML = '<span class="iko-bot-dot"></span><span>IKO</span>';
       document.documentElement.appendChild(bot);
     }
-    this.restoreSpot(bot, "ikoBotPos", 24, 22);
-    this.makeDraggable(bot, { storageKey: "ikoBotPos", dragClass: "iko-dragging" });
+    // Fixed dock: bottom-right corner sits below the composer row and clear
+    // of chat content. No dragging — the pill never moves or covers content.
+    try {
+      bot.style.position = "fixed";
+      bot.style.left = "auto";
+      bot.style.top = "auto";
+      bot.style.right = "24px";
+      bot.style.bottom = "22px";
+      bot.style.zIndex = "2147483645";
+      bot.dataset.pinned = "1";
+      bot.title = "IKO — click to show/hide";
+    } catch { /* ignore */ }
+    // Forget any previously dragged spot so the pill always docks.
+    try { localStorage.removeItem("ikoBotPos"); } catch { /* ignore */ }
+    try { globalThis.chrome?.storage?.local?.remove?.("ikoBotPos"); } catch { /* ignore */ }
     if (!bot.dataset.wired) {
       bot.dataset.wired = "1";
       bot.addEventListener("click", () => {

@@ -5,7 +5,8 @@
 #iko-context-hud {
     position: fixed;
 
-    /* default corner — NOT !important so drag (inline left/top) can move it */
+    /* composer-docked by JS (Tally-style); this corner is only the
+       pre-paint fallback — NOT !important so inline left/top wins */
     right: 24px;
     bottom: 105px;
 
@@ -314,9 +315,12 @@
 
 #iko-bot {
     position: fixed;
-    /* default spot before JS positions it; NOT !important so drag can move it */
-    right: 24px;
-    bottom: 22px;
+    /* Fixed dock: bottom-right dead zone, clear of chat content and composer.
+       Pure !important so no drag/legacy spot can move it. */
+    right: 24px !important;
+    bottom: 22px !important;
+    left: auto !important;
+    top: auto !important;
     height: 38px !important;
     min-width: 76px !important;
     padding: 0 14px !important;
@@ -331,28 +335,12 @@
     font-size: 11px !important;
     font-weight: 700 !important;
     box-shadow: 0 8px 25px rgba(0,0,0,.30) !important;
-    cursor: grab !important;
-    touch-action: none !important;
+    cursor: pointer !important;
     user-select: none !important;
     -webkit-user-select: none !important;
     -webkit-user-drag: none !important;
     z-index: 2147483645 !important;
 }
-
-#iko-bot:active { cursor: grabbing !important; }
-
-#iko-bot.iko-dragging {
-    opacity: .85 !important;
-    transform: scale(1.06) !important;
-    cursor: grabbing !important;
-}
-
-#iko-context-hud.iko-dragging {
-    opacity: .93;
-    transition: none !important;
-}
-
-#iko-bot:hover { background: rgba(38,38,42,.98) !important; color: #fff !important; }
 
 #iko-bot .iko-bot-dot {
     width: 7px !important;
@@ -360,6 +348,11 @@
     border-radius: 50% !important;
     background: #35d07f !important;
     box-shadow: 0 0 7px rgba(53,208,127,.7) !important;
+}
+
+#iko-context-hud.iko-dragging {
+    opacity: .93;
+    transition: none !important;
 }
 
 /* Hide legacy separate launchers — unified into bot+HUD */

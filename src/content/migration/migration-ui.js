@@ -314,14 +314,14 @@
                     open.addEventListener("click", async () => {
                         try {
                             const loaded = await options.onLoadLibrary?.(it.id);
-                            if (loaded?.session) {
-                                lastSession = loaded.session;
-                                migrationPackage = loaded.package || loaded.migrationPackage || loaded;
-                                renderReview(review, lastSession, { onSave: saveCurrent });
-                                showStatus(status, `Loaded “${it.title}”.`, "success");
-                                openDestination.disabled = false;
-                                prepare.textContent = "Migration Ready";
-                            }
+                            if (!loaded?.session) throw new Error("Saved session not found.");
+                            lastSession = loaded.session;
+                            migrationPackage = loaded.package || loaded.migrationPackage || loaded;
+                            renderReview(review, lastSession, { onSave: saveCurrent });
+                            showStatus(status, `Loaded “${it.title}”. Review it, then click Open destination.`, "success");
+                            openDestination.disabled = false;
+                            prepare.textContent = "Migration Ready";
+                            try { review.scrollIntoView({ block: "nearest" }); } catch { /* ignore */ }
                         } catch (e) { showError(status, e); }
                     });
                     const del = el("button", "iko-migration-button secondary iko-logs-copy", "✕");
@@ -371,13 +371,20 @@
             openDestination.disabled = true;
             showStatus(status, `Opening ${options.destinationName || "destination"}…`, "loading");
             try {
+                // Keep the package's integrity metadata in sync when we filter,
+                // but tolerate packages that don't carry an integrity block
+                // (e.g. rebuilt from an older saved session).
+                const syncIntegrity = pkg => {
+                    if (pkg?.session?.messages && pkg.integrity) pkg.integrity.messageCount = pkg.session.messages.length;
+                    return pkg;
+                };
                 // QASC minimal retrieval wins over full package when active
                 try {
                     if (activeRetrieval?.messageIds?.length && migrationPackage?.session?.messages) {
                         migrationPackage = JSON.parse(JSON.stringify(migrationPackage));
                         const keep = new Set(activeRetrieval.messageIds);
                         migrationPackage.session.messages = migrationPackage.session.messages.filter(m => keep.has(m.id));
-                        migrationPackage.integrity.messageCount = migrationPackage.session.messages.length;
+                        syncIntegrity(migrationPackage);
                     }
                 } catch { /* ignore filter errors */ }
                 // Apply message picker exclusions to the outgoing package
@@ -386,7 +393,7 @@
                     if (excluded && excluded.size && migrationPackage?.session?.messages) {
                         migrationPackage = JSON.parse(JSON.stringify(migrationPackage));
                         migrationPackage.session.messages = migrationPackage.session.messages.filter(m => !excluded.has(m.id));
-                        migrationPackage.integrity.messageCount = migrationPackage.session.messages.length;
+                        syncIntegrity(migrationPackage);
                     }
                 } catch { /* ignore filter errors */ }
                 await options.onOpenDestination?.(options.destinationId, migrationPackage);

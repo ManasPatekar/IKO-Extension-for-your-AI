@@ -1,49 +1,10 @@
 "use strict";
+
+const IKOComposer = require("../composer-io.js");
+
 (function () {
-    function deepQueryAll(selector) {
-        const out = []; const seen = new Set();
-        const pushAll = (root) => {
-            try { for (const n of root.querySelectorAll(selector)) { if (!seen.has(n)) { seen.add(n); out.push(n); } } } catch { /* ignore */ }
-            try { for (const n of root.querySelectorAll("*")) { if (n.shadowRoot) pushAll(n.shadowRoot); if (out.length > 200) break; } } catch { /* ignore */ }
-        };
-        pushAll(document);
-        return out;
-    }
     function findComposer() {
-        const sels = ["#prompt-textarea", "[data-testid='chat-input']", ".ProseMirror",
-            "div.ProseMirror[contenteditable='true']", "rich-textarea", "rich-textarea [contenteditable='true']",
-            "[aria-label*='prompt' i]", "[aria-label*='Ask' i]", "[placeholder*='Ask' i]",
-            "fieldset [contenteditable='true']",
-            "form textarea", "textarea", "[contenteditable='true']", "[role='textbox']"];
-        const cands = [];
-        for (const s of sels) {
-            try {
-                deepQueryAll(s).forEach(elm => {
-                    const r = elm.getBoundingClientRect?.() || { width: 0, height: 0, bottom: -1, top: 9999 };
-                    if (r.width > 180 && r.height > 18 && r.bottom > 0 && r.top < innerHeight) {
-                        cands.push({ elm, bottom: r.bottom, area: r.width * r.height });
-                    } else if (r.width === 0 && elm.tagName === "RICH-TEXTAREA") {
-                        try {
-                            const inner = elm.shadowRoot?.querySelector?.("[contenteditable='true']");
-                            if (inner) cands.push({ elm: inner, bottom: innerHeight - 100, area: 50000 });
-                        } catch { /* ignore */ }
-                    }
-                });
-            } catch { /* ignore */ }
-        }
-        if (!cands.length) {
-            try {
-                const labelled = document.querySelector("[aria-label*='Ask Gemini' i]");
-                if (labelled) {
-                    const inner = labelled.shadowRoot?.querySelector?.("[contenteditable]") || labelled;
-                    cands.push({ elm: inner, bottom: innerHeight - 100, area: 50000 });
-                }
-            } catch { /* ignore */ }
-        }
-        if (!cands.length) return null;
-        cands.sort((a, b) => b.bottom - a.bottom || b.area - a.area);
-        const pm = cands.find(c => c.elm.classList?.contains("ProseMirror")) || cands.find(c => c.elm.querySelector?.(".ProseMirror"));
-        return (pm?.elm?.querySelector?.(".ProseMirror") || pm?.elm || cands[0].elm);
+        return IKOComposer.findComposer();
     }
 
     function readComposer(elm) {
@@ -55,23 +16,7 @@
     }
 
     function writeComposer(elm, value) {
-        if (!elm) return false;
-        elm.focus();
-        try { elm.focus(); } catch { /* ignore */ }
-        if (elm.tagName === "TEXTAREA" || elm.tagName === "INPUT") {
-            const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
-                || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-            setter?.call(elm, value);
-        } else {
-            try {
-                elm.innerHTML = "";
-                if (!document.execCommand("insertText", false, value)) elm.textContent = value;
-            } catch { elm.textContent = value; }
-        }
-        try { elm.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertText", data: value })); } catch { /* ignore */ }
-        elm.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
-        elm.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
+        return IKOComposer.writeComposerText(elm, value);
     }
 
     // Fix stray paren above at build time guard
