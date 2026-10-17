@@ -356,6 +356,17 @@ const IKOComposer = require("../composer-io.js");
         });
 
         bar.querySelectorAll("button")[1]?.addEventListener("click", () => {
+            // Dismissing must clear the background state too, otherwise the
+            // pending-migration poll re-fetches the package and the bar
+            // reappears immediately.
+            try {
+                chrome.runtime.sendMessage(
+                    { type: "IKO_CLEAR_MIGRATION" },
+                    () => { void chrome.runtime?.lastError; }
+                );
+            } catch (error) {
+                console.debug("[IKO Migration] Could not clear migration state:", error?.message || error);
+            }
             bar.remove();
         });
     }

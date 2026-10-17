@@ -59,9 +59,8 @@ async function updateClaude(conversation) {
     }
 
     counting = true;
-    window.IKO.ui?.setLoading(true, "Counting Claude context…");
-
     try {
+        window.IKO.ui?.setLoading(true, "Counting Claude context…");
         const messages = convertClaudeConversationToMessages(conversation);
 
         if (!messages.length) {

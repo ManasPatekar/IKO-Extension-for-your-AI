@@ -13,7 +13,7 @@
     left: auto;
     top: auto;
 
-    width: 280px;
+    width: 232px;
     max-width: calc(100vw - 32px);
 
     z-index: 2147483640 !important;
@@ -29,31 +29,31 @@
         "Segoe UI",
         sans-serif;
 
-    color: #f5f5f5;
+    color: #eaeaea;
 }
 
 
-/* MAIN CARD */
+/* MAIN CARD — flat, subtle, no neon */
 
 #iko-context-hud .iko-hud-main {
-    padding: 11px 12px;
+    padding: 9px 10px;
 
-    border-radius: 13px;
+    border-radius: 10px;
 
     background:
-        rgba(25, 25, 25, 0.94);
+        rgba(15, 15, 17, 0.93);
 
     border:
-        1px solid rgba(255, 255, 255, 0.08);
+        1px solid rgba(255, 255, 255, 0.06);
 
     box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.30);
+        0 18px 40px -10px rgba(0, 0, 0, 0.50);
 
     backdrop-filter:
-        blur(18px);
+        blur(10px);
 
     -webkit-backdrop-filter:
-        blur(18px);
+        blur(10px);
 
     transition:
         transform 0.2s ease,
@@ -70,7 +70,12 @@
 
     justify-content: space-between;
 
-    margin-bottom: 9px;
+    padding-bottom: 8px;
+
+    margin-bottom: 8px;
+
+    border-bottom:
+        1px solid rgba(255, 255, 255, 0.05);
 
     cursor: move !important;
     touch-action: none !important;
@@ -89,34 +94,38 @@
 
     align-items: center;
 
-    gap: 7px;
+    gap: 6px;
 
-    font-size: 11px;
+    font-size: 10px;
 
-    font-weight: 700;
+    font-weight: 600;
 
     letter-spacing: 0.02em;
 }
 
 
 #iko-context-hud .iko-hud-dot {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
 
     border-radius: 50%;
 
-    background: #35d07f;
+    background: #94a3b8;
 
     box-shadow:
-        0 0 7px rgba(53, 208, 127, 0.7);
+        0 0 8px rgba(148, 163, 184, 0.5);
 }
 
 
 #iko-context-hud .iko-hud-platform {
-    font-size: 9px;
+    font-size: 7.5px;
+
+    letter-spacing: 0.05em;
+
+    text-transform: uppercase;
 
     color:
-        rgba(255, 255, 255, 0.42);
+        rgba(255, 255, 255, 0.36);
 }
 
 
@@ -128,7 +137,7 @@
     grid-template-columns:
         1fr 1fr;
 
-    gap: 7px;
+    gap: 6px;
 }
 
 
@@ -137,50 +146,54 @@
 
     flex-direction: column;
 
-    gap: 2px;
+    gap: 1px;
 
-    padding: 7px 8px;
+    padding: 5px 7px;
 
-    border-radius: 8px;
+    border-radius: 7px;
 
     background:
-        rgba(255, 255, 255, 0.035);
+        rgba(255, 255, 255, 0.02);
 }
 
 
 #iko-context-hud .iko-hud-stat span {
-    font-size: 8px;
+    font-size: 7px;
+
+    letter-spacing: 0.03em;
+
+    text-transform: uppercase;
 
     color:
-        rgba(255, 255, 255, 0.40);
+        rgba(255, 255, 255, 0.34);
 }
 
 
 #iko-context-hud .iko-hud-stat strong {
     font-size: 12px;
 
-    font-weight: 650;
+    font-weight: 600;
 
     color:
         rgba(255, 255, 255, 0.90);
 }
 
 
-/* MAIN PROGRESS */
+/* MAIN PROGRESS — thin neutral line, no gradient */
 
 #iko-context-hud .iko-hud-progress {
     width: 100%;
 
-    height: 3px;
+    height: 2px;
 
-    margin-top: 8px;
+    margin-top: 6px;
 
     overflow: hidden;
 
     border-radius: 999px;
 
     background:
-        rgba(255, 255, 255, 0.07);
+        rgba(255, 255, 255, 0.04);
 }
 
 
@@ -192,86 +205,35 @@
     border-radius: inherit;
 
     background:
-        linear-gradient(90deg,
-            #6ee7b7,
-            #60a5fa);
+        rgba(148, 163, 184, 0.45);
 
     transition:
-        width 0.35s ease;
+        width 0.3s ease;
 }
 
 
-/* LOADING */
+/* LOADING — text only, no bar */
 
 #iko-context-hud .iko-hud-loading {
     display: flex;
 
     align-items: center;
 
-    gap: 7px;
+    gap: 6px;
 
-    margin-top: 8px;
+    margin-top: 6px;
 
-    font-size: 8px;
+    font-size: 7px;
 
     color:
-        rgba(255, 255, 255, 0.42);
-}
-
-
-#iko-context-hud .iko-hud-loading-track {
-    flex: 1;
-
-    height: 2px;
-
-    overflow: hidden;
-
-    border-radius: 999px;
-
-    background:
-        rgba(255, 255, 255, 0.08);
-}
-
-
-#iko-context-hud #iko-hud-loading-bar {
-    width: 0;
-
-    height: 100%;
-
-    border-radius: 999px;
-
-    background:
-        linear-gradient(90deg,
-            #60a5fa,
-            #a78bfa,
-            #60a5fa);
-}
-
-
-#iko-context-hud #iko-hud-loading-bar.iko-indeterminate {
-    animation:
-        ikoLoading 1.15s ease-in-out infinite;
-}
-
-
-@keyframes ikoLoading {
-
-    0% {
-        transform:
-            translateX(-110%);
-    }
-
-    100% {
-        transform:
-            translateX(330%);
-    }
+        rgba(255, 255, 255, 0.36);
 }
 
 
 /* STATUS */
 
 #iko-context-hud .iko-hud-status {
-    margin-top: 6px;
+    margin-top: 5px;
 
     overflow: hidden;
 
@@ -279,36 +241,80 @@
 
     text-overflow: ellipsis;
 
-    font-size: 8px;
+    font-size: 7.5px;
 
     color:
-        rgba(255, 255, 255, 0.30);
+        rgba(255, 255, 255, 0.34);
+
+    min-height: 10px;
 }
 
-/* ACTIONS — Migrate + Optimize in same HUD area */
+/* ACTIONS — flat, minimal, no emojis */
 
 #iko-context-hud .iko-hud-actions {
     display: flex !important;
-    gap: 7px !important;
-    margin-top: 9px !important;
+    gap: 6px !important;
+    margin-top: 7px !important;
 }
 
 #iko-context-hud .iko-hud-actions button {
     flex: 1 !important;
-    height: 32px !important;
-    border: 1px solid rgba(255,255,255,.10) !important;
-    border-radius: 8px !important;
-    background: rgba(255,255,255,.06) !important;
-    color: rgba(255,255,255,.85) !important;
+    height: 30px !important;
+    border: 1px solid rgba(255,255,255,.07) !important;
+    border-radius: 10px !important;
+    background: rgba(255,255,255,.025) !important;
+    color: rgba(255,255,255,.70) !important;
     font-size: 10px !important;
-    font-weight: 600 !important;
+    font-weight: 500 !important;
     cursor: pointer !important;
     font-family: inherit !important;
+    letter-spacing: 0.01em !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    padding: 0 !important;
+
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        color 0.15s ease !important;
+}
+
+#iko-context-hud .iko-hud-actions .iko-hud-icon {
+    width: 10px !important;
+    height: 10px !important;
+    flex: 0 0 auto !important;
+    display: block !important;
+    opacity: 0.55 !important;
+
+    transition: opacity 0.15s ease !important;
+}
+
+#iko-context-hud .iko-hud-actions .iko-btn-label {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 #iko-context-hud .iko-hud-actions button:hover {
-    background: rgba(255,255,255,.12) !important;
+    transform: translateY(-1px) !important;
+
+    background: rgba(255,255,255,.05) !important;
+    border-color:
+        rgba(255, 255, 255, 0.14) !important;
+
     color: #fff !important;
+
+    box-shadow:
+        0 6px 16px rgba(0, 0, 0, 0.28) !important;
+}
+
+#iko-context-hud .iko-hud-actions button:hover .iko-hud-icon {
+    opacity: 0.85 !important;
 }
 
 /* Single IKO bot — click toggles the HUD above */
@@ -321,20 +327,20 @@
     bottom: 22px !important;
     left: auto !important;
     top: auto !important;
-    height: 38px !important;
-    min-width: 76px !important;
-    padding: 0 14px !important;
+    height: 32px !important;
+    min-width: 70px !important;
+    padding: 0 11px !important;
     display: flex !important;
     align-items: center !important;
-    gap: 7px !important;
-    border: 1px solid rgba(255,255,255,.13) !important;
-    border-radius: 19px !important;
-    background: rgba(24,24,27,.96) !important;
-    color: rgba(255,255,255,.85) !important;
+    gap: 6px !important;
+    border: 1px solid rgba(255,255,255,.09) !important;
+    border-radius: 16px !important;
+    background: rgba(15,15,17,.94) !important;
+    color: rgba(255,255,255,.78) !important;
     font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    box-shadow: 0 8px 25px rgba(0,0,0,.30) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    box-shadow: 0 10px 24px -4px rgba(0,0,0,0.40) !important;
     cursor: pointer !important;
     user-select: none !important;
     -webkit-user-select: none !important;
@@ -343,16 +349,11 @@
 }
 
 #iko-bot .iko-bot-dot {
-    width: 7px !important;
-    height: 7px !important;
+    width: 4px !important;
+    height: 4px !important;
     border-radius: 50% !important;
-    background: #35d07f !important;
-    box-shadow: 0 0 7px rgba(53,208,127,.7) !important;
-}
-
-#iko-context-hud.iko-dragging {
-    opacity: .93;
-    transition: none !important;
+    background: #94a3b8 !important;
+    box-shadow: 0 0 6px rgba(148,163,184,.45) !important;
 }
 
 /* Hide legacy separate launchers — unified into bot+HUD */

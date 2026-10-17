@@ -99,28 +99,35 @@
 
         // Export + save row
         const row = el("div", "iko-logs-row");
-        const bMd = el("button", "iko-migration-button secondary iko-logs-copy", "↓ .md");
+        const icoDownload = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+        const icoBookmark = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+        const bMd = el("button", "iko-migration-button secondary iko-logs-copy");
         bMd.type = "button";
+        bMd.innerHTML = `${icoDownload}<span>.md</span>`;
         bMd.addEventListener("click", () => download(`${(source.title || "iko-session").slice(0, 40)}.md`, sessionToMarkdown(session), "text/markdown"));
-        const bJson = el("button", "iko-migration-button secondary iko-logs-copy", "↓ .json");
+        const bJson = el("button", "iko-migration-button secondary iko-logs-copy");
         bJson.type = "button";
+        bJson.innerHTML = `${icoDownload}<span>.json</span>`;
         bJson.addEventListener("click", () => download(`${(source.title || "iko-session").slice(0, 40)}.json`, JSON.stringify(session, null, 2), "application/json"));
-        const bSir = el("button", "iko-migration-button secondary iko-logs-copy", "↓ .sir");
+        const bSir = el("button", "iko-migration-button secondary iko-logs-copy");
         bSir.type = "button";
         bSir.title = "Semantic IR — token-efficient representation";
+        bSir.innerHTML = `${icoDownload}<span>.sir</span>`;
         bSir.addEventListener("click", () => {
             try {
                 const sir = window.IKOSIRCore?.sessionToSIR?.(session) || "; SIR unavailable";
                 download(`${(source.title || "iko-session").slice(0, 40)}.sir.txt`, `; SIR v${window.IKOSIRCore?.SIR_VERSION || "0.1"}\n${sir}`, "text/plain");
             } catch (e) { console.error("[IKO] SIR export failed:", e); }
         });
-        const bSave = el("button", "iko-migration-button secondary iko-logs-copy", "★ Save");
+        const bSave = el("button", "iko-migration-button secondary iko-logs-copy");
         bSave.type = "button";
+        bSave.innerHTML = `${icoBookmark}<span class="iko-btn-label">Save</span>`;
         bSave.addEventListener("click", async () => {
-            bSave.textContent = "Saving…";
-            try { await helpers.onSave?.(); bSave.textContent = "Saved ✓"; }
-            catch (e) { bSave.textContent = "Save failed"; }
-            setTimeout(() => { bSave.textContent = "★ Save"; }, 1500);
+            const saveLabel = bSave.querySelector(".iko-btn-label");
+            saveLabel.textContent = "Saving…";
+            try { await helpers.onSave?.(); saveLabel.textContent = "Saved ✓"; }
+            catch (e) { saveLabel.textContent = "Save failed"; }
+            setTimeout(() => { saveLabel.textContent = "Save"; }, 1500);
         });
         row.append(bMd, bJson, bSir, bSave);
         container.appendChild(row);
@@ -148,7 +155,9 @@
         const body = el("div", "iko-migration-body");
         const direction = el("div", "iko-migration-direction");
         direction.appendChild(el("span", "iko-direction-source", options.sourceName || "Current AI Session"));
-        direction.appendChild(el("span", "iko-direction-arrow", "→"));
+        const directionArrow = el("span", "iko-direction-arrow");
+        directionArrow.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
+        direction.appendChild(directionArrow);
         direction.appendChild(el("span", "iko-direction-destination", options.destinationName || "Destination AI"));
         body.appendChild(direction);
 

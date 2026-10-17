@@ -421,8 +421,15 @@
 }
 
 .iko-direction-arrow {
-    color: rgba(255,255,255,.32) !important;
-    font-size: 15px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+
+    color:
+        rgba(255, 255, 255, 0.30) !important;
+}
+
+.iko-direction-arrow svg {
+    display: block !important;
 }
 
 .iko-migration-card {
@@ -816,6 +823,23 @@
     height: 30px !important;
     padding: 0 12px !important;
     font-size: 10px !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
+.iko-logs-copy svg {
+    flex: 0 0 auto !important;
+    display: block !important;
+
+    opacity: 0.72 !important;
+
+    transition: opacity 0.15s ease !important;
+}
+
+.iko-logs-copy:hover svg {
+    opacity: 1 !important;
 }
 
 /* ---- question box (QASC) ---- */

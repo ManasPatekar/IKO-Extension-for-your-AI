@@ -251,21 +251,11 @@ window.IKO.ui = {
                     id="iko-hud-loading"
                     hidden
                 >
-
-                    <div
-                        class="iko-hud-loading-track"
-                    >
-                        <div
-                            id="iko-hud-loading-bar"
-                        ></div>
-                    </div>
-
                     <span
                         id="iko-hud-loading-text"
                     >
                         Counting context…
                     </span>
-
                 </div>
 
 
@@ -290,9 +280,16 @@ window.IKO.ui = {
 
                 <!-- ACTIONS: Migrate + Optimize + Files in same HUD -->
                 <div class="iko-hud-actions" id="iko-hud-actions">
-                    <button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM">↗ Migrate</button>
-                    <button type="button" id="iko-hud-optimize" title="Optimize your current prompt">✨ Optimize</button>
-                    <button type="button" id="iko-hud-files" title="Optimize image/PDF uploads to save tokens">📎 Files</button>
+                    <button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM">
+                        <svg class="iko-hud-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        <span class="iko-btn-label">Migrate</span>
+                    </button>
+                    <button type="button" id="iko-hud-optimize" title="Optimize your current prompt">
+                        <span class="iko-btn-label">Optimize</span>
+                    </button>
+                    <button type="button" id="iko-hud-files" title="Optimize image/PDF uploads to save tokens">
+                        <span class="iko-btn-label">Files</span>
+                    </button>
                 </div>
 
             </div>
@@ -349,7 +346,7 @@ window.IKO.ui = {
       const wrap = document.createElement("div");
       wrap.className = "iko-hud-actions";
       wrap.id = "iko-hud-actions";
-      wrap.innerHTML = '<button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM">↗ Migrate</button><button type="button" id="iko-hud-optimize" title="Optimize your current prompt">✨ Optimize</button><button type="button" id="iko-hud-files" title="Optimize image/PDF uploads">📎 Files</button>';
+      wrap.innerHTML = '<button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM"><svg class="iko-hud-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="iko-btn-label">Migrate</span></button><button type="button" id="iko-hud-optimize" title="Optimize your current prompt"><span class="iko-btn-label">Optimize</span></button><button type="button" id="iko-hud-files" title="Optimize image/PDF uploads"><span class="iko-btn-label">Files</span></button>';
       main.appendChild(wrap);
     } catch { /* ignore */ }
   },

@@ -247,7 +247,9 @@ function renderBadge() {
         const btn = document.getElementById("iko-hud-files");
         if (!btn) return;
         const total = seenFiles.reduce((t, f) => t + (f.origTokens || 0), 0);
-        btn.textContent = seenFiles.length ? `📎 Files·~${fmtTok(total)}` : "📎 Files";
+        const label = btn.querySelector(".iko-btn-label");
+        if (label) label.textContent = seenFiles.length ? `Files·~${fmtTok(total)}` : "Files";
+        else btn.textContent = seenFiles.length ? `Files·~${fmtTok(total)}` : "Files";
         btn.title = seenFiles.length
             ? `${seenFiles.length} upload(s) detected · ~${fmtTok(total)} tokens. Click to optimize.`
             : "No uploads detected yet. Attach an image/PDF to optimize it.";

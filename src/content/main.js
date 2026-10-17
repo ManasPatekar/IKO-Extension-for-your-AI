@@ -109,9 +109,15 @@ function extractMessages() {
 }
 
 function update() {
-    if (counting || !window.IKO.ui) return;
+    if (!window.IKO.ui) return;
+    if (counting) return;
 
-    const messages = extractMessages();
+    let messages = [];
+    try {
+        messages = extractMessages();
+    } catch {
+        messages = [];
+    }
 
     if (!messages.length) {
         window.IKO.ui.update({
@@ -126,45 +132,46 @@ function update() {
     }
 
     counting = true;
-    window.IKO.ui.setLoading(true, "Counting context…");
-
     try {
-        const usedFallback = messages.length && messages[0].fallback;
-        const tokens = messages.reduce(
-            (total, message) => total + countTokens(message.content.slice(0, 20000)),
-            0
-        );
+        window.IKO.ui.setLoading(true, "Counting context…");
+        try {
+            const usedFallback = messages.length && messages[0].fallback;
+            const tokens = messages.reduce(
+                (total, message) => total + countTokens(message.content.slice(0, 20000)),
+                0
+            );
 
-        const plat = detectPlatform();
-        const budget = Number(window.IKO.config?.contextBudget || BUDGETS[plat] || 200000);
-        const price = PRICES[plat] || 2.0;
-        const cost = tokens / 1000000 * price;
-        const pct = Math.min(100, Math.round((tokens / budget) * 100));
-        const health = pct >= 95 ? "⚠ Context critical — migrate or summarize" : pct >= 80 ? "⚠ Context filling — consider migrate" : (usedFallback ? "Fallback estimate — verify roles" : "Local tokenizer estimate");
+            const plat = detectPlatform();
+            const budget = Number(window.IKO.config?.contextBudget || BUDGETS[plat] || 200000);
+            const price = PRICES[plat] || 2.0;
+            const cost = tokens / 1000000 * price;
+            const pct = Math.min(100, Math.round((tokens / budget) * 100));
+            const health = pct >= 95 ? "⚠ Context critical — migrate or summarize" : pct >= 80 ? "⚠ Context filling — consider migrate" : (usedFallback ? "Fallback estimate — verify roles" : "Local tokenizer estimate");
 
-        window.IKO.latestData = {
-            platform: plat,
-            tokens,
-            messageCount: messages.length,
-            usagePercentage: pct,
-            tokenizer: "o200k_base",
-            cost,
-            status: `${health} · ~$${cost.toFixed(3)}`
-        };
+            window.IKO.latestData = {
+                platform: plat,
+                tokens,
+                messageCount: messages.length,
+                usagePercentage: pct,
+                tokenizer: "o200k_base",
+                cost,
+                status: `${health} · ~$${cost.toFixed(3)}`
+            };
 
-        window.IKO.ui.update(window.IKO.latestData);
-    } catch (error) {
-        console.error("[IKO ChatGPT] Tokenizer failed:", error);
-        window.IKO.ui.update({
-            platform: detectPlatform(),
-            tokens: 0,
-            messageCount: messages.length,
-            usagePercentage: 0,
-            tokenizer: "o200k_base",
-            status: "Tokenizer error"
-        });
+            window.IKO.ui.update(window.IKO.latestData);
+        } catch (error) {
+            console.error("[IKO ChatGPT] Tokenizer failed:", error);
+            window.IKO.ui.update({
+                platform: detectPlatform(),
+                tokens: 0,
+                messageCount: messages.length,
+                usagePercentage: 0,
+                tokenizer: "o200k_base",
+                status: "Tokenizer error"
+            });
+        }
     } finally {
-        window.IKO.ui.setLoading(false);
+        try { window.IKO.ui.setLoading(false); } catch { /* never leave the HUD stuck counting */ }
         counting = false;
     }
 }
