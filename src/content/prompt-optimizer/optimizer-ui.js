@@ -20,7 +20,11 @@
         const close = el("button", "iko-optimizer-close", "×");
         close.type = "button";
         close.addEventListener("click", () => root.remove());
-        header.appendChild(close);
+        const headerActions = el("div", "iko-header-actions");
+        const themeBtn = window.IKOTheme?.button?.();
+        if (themeBtn) headerActions.appendChild(themeBtn);
+        headerActions.appendChild(close);
+        header.appendChild(headerActions);
 
         const body = el("div", "iko-optimizer-body");
         const modeRow = el("div", "iko-optimizer-modes");

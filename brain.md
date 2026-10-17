@@ -521,14 +521,77 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
     "IKO migration ready — Insert session context" bar then appears. The
     pending poll skips when the link is dead; `showError` maps stale-link
     errors to a friendly "refresh to reconnect" message.
+40. Retro-arcade redesign of all four surfaces (committed `f741e76`): one shared
+    `--iko-*` token block duplicated in `style.css` + `migration.css` so each
+    injected sheet stays self-contained; thick black outlines, hard offset
+    shadows, square corners, heavy condensed display type, flat retro palette.
+    Semantic button colours (Migrate=yellow, Optimize=lime, Files=white,
+    destination=pink) and hierarchical shadows (modal 8px, cards 5px, buttons
+    5px, HUD buttons 3px). Gate check: no soft/blurred shadows, no gradients.
+41. Export-row overflow (your screenshot — `.md/.json/.sir/Save` labels spilling
+    out of their buttons): `.iko-logs-copy { height: 30px }` plus inline
+    `svg`+`span` content and NO flex on the button means the inline content
+    WRAPS, so the second line overflows the fixed height. Fix:
+    `.iko-migration-button` is now `display:inline-flex; align-items:center;
+    justify-content:center; gap:8px; white-space:nowrap` and `.iko-logs-copy` is
+    32px with `line-height:1`. The icons are also bolder now (15px,
+    `stroke-width:3`, square caps, miter joins, chunky download-arrow +
+    bookmark paths) so they match the arcade outlines.
+42. Moon/sun dark mode (`src/content/theme.js`, new): singleton bundled into
+    BOTH content bundles (guard = `window.IKOTheme`), owning the theme. It
+    mirrors the effective theme onto `<html data-iko-theme="light|dark">`, which
+    is what the stylesheets key off. Preference order: explicit choice (mirrored
+    into `localStorage` for a flash-free synchronous boot, plus
+    `chrome.storage.local` so it follows the user across sites) →
+    `prefers-color-scheme`. Dark mode flips `--iko-ink` (borders + hard shadows
+    + focus rings) and swaps the semantic text/surface/field tokens; the bright
+    accents stay saturated and keep black text. The ink is a WARM "printed
+    paper" cream (`#f0e2bd`) over warm-black surfaces, not pure white — white
+    at 3px outlines + hard shadows measured 17.9:1 contrast and glared; the
+    cream sits at ~14:1, still far above AA. Toggle buttons sit in all four
+    headers — `.iko-header-actions` groups them with the close button, and the
+    HUD uses the compact `.iko-theme-toggle-sm`. GOTCHA: `migration.css`
+    declares its rules `!important` (host-page immunity) and BOTH sheets are
+    injected together, so a non-`!important` override in `style.css` can NEVER
+    win — the compact variant must be `!important` too (same reason the
+    `--iko-*` tokens are duplicated rather than layered).
+43. Invisible text on accent fills (your screenshot: HUD "Migrate"/"Optimize"
+    unreadable in dark mode). Root cause: those rules only swapped in an accent
+    BACKGROUND, so the label kept inheriting the theme text colour — and in dark
+    mode that is cream, giving cream-on-yellow at contrast 1.2. The accents are
+    the same value in both themes, but the text tokens are not, so **any rule
+    that paints an accent background must PIN `color: var(--iko-black)`**.
+    Fixed in 5 places: `#iko-hud-migrate`, `#iko-hud-optimize`,
+    `.iko-optimizer-mode.active`,
+    `.iko-migration-button.secondary:hover:not(:disabled)` (sky hover!) and
+    `#iko-pending-migration button:last-child` (pink) — the last three were
+    found by the new guards, not reported. Guards so it cannot come back:
+    (a) a rendered WCAG-AA contrast gate over every IKO element with text, both
+    themes; (b) a forced-`:hover` pass (`CSS.forcePseudoState` on every IKO
+    button) re-running the same measurement, because the resting render never
+    reaches hover fills. The verify suites now READ the palette out of
+    `style.css` instead of hardcoding hexes, so colour changes are re-checked
+    automatically rather than silently drifting.
 
 ## 5. Build / test / run
 
 ```bash
 npm install
 node build.js        # or npm run build → dist/{content,claude-content,claude-bridge,chatgpt-bridge,migration}.js + css
-npm test             # 38 tests: 11 migration + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude
+npm test             # 50 tests: 11 migration + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 fullhistory… (run it, don't trust the count)
 ```
+
+UI verification harness (outside the repo, in `$HOME`) — computed-style checks in
+headless Brave over CDP, because the four surfaces can't be eyeballed from a
+screenshot in CI:
+```bash
+node iko-serve.cjs &                         # serves the real modules over http
+node iko-verify2.mjs 9222 file://…/iko-ui-preview.html   # mock surfaces, light + dark
+node iko-verify-real.mjs 9222 http://127.0.0.1:8731/preview.html  # real ui.js/migration-ui/optimizer-ui/attachment-saver
+node iko-verify-os-theme.mjs 9222 http://127.0.0.1:8731/preview.html  # preference order
+node iko-shot-zoom.mjs 9222 http://127.0.0.1:8731/preview.html        # zoomed clips, both themes
+```
+Never drive the user's real Brave (`--load-extension`); use a separate profile dir.
 Load: `chrome://extensions` → Developer → Load unpacked → folder with
 `manifest.json`. Open **fresh** LLM tab (old tabs → `Extension context invalidated`).
 Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
@@ -551,6 +614,12 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
   between validate/package; log via `IKO.logger`; cover in `migration.test.js`.
 - New modal feature: extend `migration-ui.js` with `details` section +
   callbacks via `options.onX` wired in `migration-main.js` (load-order safe).
+- New theme-aware surface: use the semantic tokens (`--iko-ink` for outlines and
+  hard shadows, `--iko-text`/`--iko-text-muted` for text on a surface,
+  `--iko-surface`/`--iko-surface-muted` for backgrounds, `--iko-field` for
+  inputs and tracks). Keep literal `var(--iko-black)` ONLY for text sitting on a
+  bright accent fill — those stay black in both themes. Add new dark values to
+  BOTH `:root[data-iko-theme="dark"]` blocks.
 - Never: hardcode host/selector outside `platforms.js`, use `window.open()`,
   `postMessage("*")` without source check relaxation, or edit `dist/`.
 
@@ -566,7 +635,8 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
 - `checkPendingMigration` 1.5s poll + HUD 2s poll — replace with
   `MutationObserver` + `storage.onChanged` for battery.
 - `postMessage("*")` + broad selectors — tighten origin + validate payload shape.
-- No e2e on real DOM; only Node unit tests. Add Playwright fixtures per LLM.
+- No e2e on real DOM; only Node unit tests + the `$HOME` CDP style harness
+  (real modules, but synthetic host page). Add Playwright fixtures per LLM.
 - Accessibility/i18n minimal; settings page absent (budgets hardcoded + override
   via `IKO.config` only).
 

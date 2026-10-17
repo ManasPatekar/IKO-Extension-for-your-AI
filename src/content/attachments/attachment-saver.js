@@ -284,6 +284,19 @@ function openPanel() {
             </div>
         </div>`;
     root.querySelector(".iko-att-x")?.addEventListener("click", () => root.remove());
+    // Group the theme switch with the close button
+    try {
+        const head = root.querySelector(".iko-att-head");
+        const closeBtn = root.querySelector(".iko-att-x");
+        if (head && closeBtn && window.IKOTheme) {
+            const actions = document.createElement("div");
+            actions.className = "iko-header-actions";
+            const themeBtn = window.IKOTheme.button();
+            if (themeBtn) actions.appendChild(themeBtn);
+            actions.appendChild(closeBtn);
+            head.appendChild(actions);
+        }
+    } catch { /* ignore */ }
     root.addEventListener("click", (e) => { if (e.target === root) root.remove(); });
     const list = root.querySelector("#iko-att-list");
     const render = () => {

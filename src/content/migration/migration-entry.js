@@ -15,6 +15,7 @@ const IKOOCR = require("../../migration/sir/ocr.js");
 const IKORETRIEVAL = require("../../migration/sir/retrieval.js");
 
 require("./iko-log.js");
+require("../theme.js");
 require("./migration-ui.js");
 require("./migration-main.js");
 require("../prompt-optimizer/optimizer-ui.js");

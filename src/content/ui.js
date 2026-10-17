@@ -1,6 +1,7 @@
 "use strict";
 
 import IKOComposer from "./composer-io.js";
+import "./theme.js";
 try { window.IKOComposer = window.IKOComposer || IKOComposer; } catch { /* ignore */ }
 
 window.IKO = window.IKO || {};
@@ -148,7 +149,10 @@ window.IKO.ui = {
               this.ensureActionsIn(hud);
               this.wireActions();
             }
-            if (hud) this.wireHudDrag();
+            if (hud) {
+              this.ensureThemeToggle(hud);
+              this.wireHudDrag();
+            }
           } catch { /* ignore */ }
         },
         2000
@@ -174,6 +178,7 @@ window.IKO.ui = {
       this.hud = existing;
       this.ensureBot();
       this.ensureActionsIn(existing);
+      this.ensureThemeToggle(existing);
       this.wireActions();
       this.wireHudDrag();
       this.position();
@@ -281,7 +286,7 @@ window.IKO.ui = {
                 <!-- ACTIONS: Migrate + Optimize + Files in same HUD -->
                 <div class="iko-hud-actions" id="iko-hud-actions">
                     <button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM">
-                        <svg class="iko-hud-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        <svg class="iko-hud-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3.5 12h14"/><path d="m11.5 5 7 7-7 7"/></svg>
                         <span class="iko-btn-label">Migrate</span>
                     </button>
                     <button type="button" id="iko-hud-optimize" title="Optimize your current prompt">
@@ -307,6 +312,7 @@ window.IKO.ui = {
     this.hud = hud;
 
     this.ensureBot();
+    this.ensureThemeToggle(hud);
     this.wireActions();
     this.wireHudDrag();
 
@@ -337,6 +343,20 @@ window.IKO.ui = {
     this.startPositionTracking();
   },
 
+  // Moon/sun theme switch in the HUD header strip
+  ensureThemeToggle(hudRoot) {
+    try {
+      const top =
+        hudRoot.querySelector(".iko-hud-top");
+      if (!top || top.querySelector(".iko-theme-toggle")) return;
+      const theme = window.IKOTheme;
+      if (!theme) return;
+      top.appendChild(
+        theme.button("iko-theme-toggle-sm")
+      );
+    } catch { /* ignore */ }
+  },
+
   // Backfill actions row into HUDs created by older builds
   ensureActionsIn(hudRoot) {
     try {
@@ -346,7 +366,7 @@ window.IKO.ui = {
       const wrap = document.createElement("div");
       wrap.className = "iko-hud-actions";
       wrap.id = "iko-hud-actions";
-      wrap.innerHTML = '<button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM"><svg class="iko-hud-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg><span class="iko-btn-label">Migrate</span></button><button type="button" id="iko-hud-optimize" title="Optimize your current prompt"><span class="iko-btn-label">Optimize</span></button><button type="button" id="iko-hud-files" title="Optimize image/PDF uploads"><span class="iko-btn-label">Files</span></button>';
+      wrap.innerHTML = '<button type="button" id="iko-hud-migrate" title="Migrate this session to another LLM"><svg class="iko-hud-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M3.5 12h14"/><path d="m11.5 5 7 7-7 7"/></svg><span class="iko-btn-label">Migrate</span></button><button type="button" id="iko-hud-optimize" title="Optimize your current prompt"><span class="iko-btn-label">Optimize</span></button><button type="button" id="iko-hud-files" title="Optimize image/PDF uploads"><span class="iko-btn-label">Files</span></button>';
       main.appendChild(wrap);
     } catch { /* ignore */ }
   },

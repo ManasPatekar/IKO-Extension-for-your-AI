@@ -103,8 +103,8 @@
 
         // Export + save row
         const row = el("div", "iko-logs-row");
-        const icoDownload = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
-        const icoBookmark = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+        const icoDownload = `<svg class="iko-logs-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M12 2.6v12"/><path d="M6.2 9.2 12 15l5.8-5.8"/><path d="M3.6 20.4h16.8"/></svg>`;
+        const icoBookmark = `<svg class="iko-logs-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter" aria-hidden="true"><path d="M5.6 2.6h12.8v18.8l-6.4-5.4-6.4 5.4z"/></svg>`;
         const bMd = el("button", "iko-migration-button secondary iko-logs-copy");
         bMd.type = "button";
         bMd.innerHTML = `${icoDownload}<span>.md</span>`;
@@ -154,13 +154,17 @@
         const close = el("button", "iko-migration-close", "×");
         close.type = "button";
         close.addEventListener("click", closeMigrationPanel);
-        header.append(headerText, close);
+        const headerActions = el("div", "iko-header-actions");
+        const themeBtn = window.IKOTheme?.button?.();
+        if (themeBtn) headerActions.appendChild(themeBtn);
+        headerActions.appendChild(close);
+        header.append(headerText, headerActions);
 
         const body = el("div", "iko-migration-body");
         const direction = el("div", "iko-migration-direction");
         direction.appendChild(el("span", "iko-direction-source", options.sourceName || "Current AI Session"));
         const directionArrow = el("span", "iko-direction-arrow");
-        directionArrow.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`;
+        directionArrow.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><line x1="3.5" y1="12" x2="19" y2="12"/><polyline points="12.5 5.5 19 12 12.5 18.5"/></svg>`;
         direction.appendChild(directionArrow);
         direction.appendChild(el("span", "iko-direction-destination", options.destinationName || "Destination AI"));
         body.appendChild(direction);
