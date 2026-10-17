@@ -687,7 +687,7 @@ window.IKO.ui = {
       clearTimeout(this._loadingSafetyTimer);
       this._loadingSafetyTimer = setTimeout(() => {
         try { this.setLoading(false); } catch { /* ignore */ }
-        try { window.IKO.ui.countingReset?.(); } catch { /* ignore */ }
+        try { window.IKO?.resetCounting?.(); } catch { /* ignore */ }
       }, 8000);
 
       return;

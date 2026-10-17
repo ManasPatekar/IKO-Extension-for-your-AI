@@ -22,8 +22,12 @@
                 stack: error?.stack?.slice(0, 2000)
             });
         } catch { /* ignore */ }
+        const raw = error?.message || String(error);
+        const friendly = /extension context invalidated|message port closed|receiving end does not exist|could not establish connection/i.test(raw)
+            ? "IKO's link to this page was reset (the extension was reloaded). Refresh this page (Ctrl+R) to reconnect, then try again."
+            : raw;
         const hint = "\n\nTip: open 'View logs' below → Copy logs → paste in DevTools issue.";
-        showStatus(node, (error?.message || String(error)) + hint, "error");
+        showStatus(node, friendly + hint, "error");
     }
 
     function download(filename, text, mime) {
@@ -419,7 +423,11 @@
                         syncIntegrity(migrationPackage);
                     }
                 } catch { /* ignore filter errors */ }
-                await options.onOpenDestination?.(options.destinationId, migrationPackage);
+                const response = await options.onOpenDestination?.(options.destinationId, migrationPackage);
+                if (response?.status === "reconnecting") {
+                    showStatus(status, "IKO's link to this page was reset — refreshing to reconnect, then opening the destination…", "loading");
+                    return;
+                }
                 showStatus(status, "Destination opened.", "success");
             } catch (error) {
                 openDestination.disabled = false;

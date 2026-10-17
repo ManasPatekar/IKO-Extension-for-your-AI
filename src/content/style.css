@@ -229,6 +229,13 @@
         rgba(255, 255, 255, 0.36);
 }
 
+/* The author `display: flex` above would otherwise beat the user-agent
+   [hidden] rule, leaving the row permanently visible ("stuck counting").
+   Force the hidden attribute to win. */
+#iko-context-hud .iko-hud-loading[hidden] {
+    display: none !important;
+}
+
 
 /* STATUS */
 

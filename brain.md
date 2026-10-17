@@ -1,4 +1,4 @@
-# IKO BRAIN — Complete Project Knowledge (v0.2.0-universal+attachments+dragbot+sir-p0+p1-pdf+p1b-ocr+p2-retrieval+hud-drag+copilot-fix+claude-fix)
+# IKO BRAIN — Complete Project Knowledge (v0.2.0-universal+attachments+dragbot+sir-p0+p1-pdf+p1b-ocr+p2-retrieval+hud-drag+copilot-fix+claude-fix+full-history+hud-loading-fix+reconnect)
 
 > Read this first. It documents every feature, file, data flow, upgrade,
 > and how to extend the project without breaking it.
@@ -485,6 +485,42 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
     9-shape `parseBridgeMessages`, `detectRole`/`extractTextDeep` pure helpers
     (5 Node tests in `claude.test.js`), structured-DOM + leaf-DOM passes,
     `/new` empty-chat-specific error. `npm test` = 38 total (11+7+4+5+6+5).
+35. Full-history migration (`core/full-history.js`): walks the message scroll
+    container to the top, waits for lazy batches, nudges pinned-scrollTop
+    sites, restores scroll position, 45s cap. Wired into the ChatGPT, Claude
+    and universal source adapters; "fuller wins" when API/bridge vs DOM (tie →
+    structured API). Destination insert now APPENDS all parts in ONE click
+    (with retry-from-part-N state) so a multi-part session lands as a single
+    coherent message; `maxChars` 7500→12000. `test:fullhistory` (7 tests);
+    `npm test` = 50.
+36. Minimal redesign + pending-bar/counting fixes: migration panel gets section
+    cards, animated chevron `details`, dashed empty library state, mini-card
+    library rows and SVG icon buttons; HUD drops neon/glyph style for SVG
+    icons, a flat dark card, slate dot `#94a3b8` and a thin neutral bar. The
+    pending bar's × now sends `IKO_CLEAR_MIGRATION` before `remove()` (the poll
+    was re-adding it). `setLoading(true)` moved inside the `try` so
+    `setLoading(false)` + `counting=false` always run in `finally`
+    (`main.js` / `claude-main.js`).
+37. Gemini HUD: `extractMessages()` returns `[]` on the `/app` homepage (0
+    context instead of a bogus count); usage shows `<1%` when tokens > 0 but
+    the rounded percentage is 0.
+38. ROOT CAUSE of the persistent "Counting context…" row: the author rule
+    `#iko-context-hud .iko-hud-loading { display: flex }` OUTRANKS the
+    user-agent `[hidden] { display: none }` rule, so `loadingElement.hidden =
+    true` never actually hid the row — the JS `finally` was correct all along.
+    Fixed with `.iko-hud-loading[hidden] { display: none !important }`.
+    Verified in headless Brave: `hidden`+`display:flex` → `flex`;
+    `hidden`+`[hidden]!important` → `none`. Added an 8s safety timer in
+    `ui.js:setLoading(true)` and `window.IKO.resetCounting()` as a backstop.
+39. "Extension context invalidated" when clicking "Open destination": reloading
+    the extension leaves already-open tabs with a dead content script
+    (`chrome.runtime.id` undefined), so messaging throws. `migration-main` now
+    checks `isExtensionContextAlive()` first; if dead it stashes the prepared
+    package in `sessionStorage` (per-tab), refreshes the page, and
+    `resumeHandoff()` opens the destination once the link is live — the normal
+    "IKO migration ready — Insert session context" bar then appears. The
+    pending poll skips when the link is dead; `showError` maps stale-link
+    errors to a friendly "refresh to reconnect" message.
 
 ## 5. Build / test / run
 

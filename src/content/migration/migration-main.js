@@ -59,6 +59,56 @@ const IKOComposer = require("../composer-io.js");
         return null;
     }
 
+    // Reloading IKO (brave://extensions → reload) while a tab stays open kills
+    // that content script's link to the extension: chrome.runtime.sendMessage
+    // then throws "Extension context invalidated" and "Open destination" can't
+    // reach the background. The only cure is a page refresh — so we remember
+    // the prepared package for this (sessionStorage = per-tab), refresh, and
+    // then open the destination with a live connection.
+    function isExtensionContextAlive() {
+        try {
+            return Boolean(globalThis.chrome?.runtime?.id && chrome.runtime.sendMessage);
+        } catch {
+            return false;
+        }
+    }
+
+    const HANDOFF_KEY = "iko:migration-handoff";
+
+    function stashHandoff(destination, pkg) {
+        try {
+            sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ destination, package: pkg, at: Date.now() }));
+        } catch { /* private mode / quota — a refresh still reconnects the link */ }
+    }
+
+    function takeHandoff() {
+        try {
+            const raw = sessionStorage.getItem(HANDOFF_KEY);
+            if (!raw) return null;
+            sessionStorage.removeItem(HANDOFF_KEY);
+            const parsed = JSON.parse(raw);
+            // Ignore stale leftovers from an earlier visit to this tab.
+            if (!parsed || Date.now() - Number(parsed.at || 0) > 20000) return null;
+            return parsed;
+        } catch {
+            return null;
+        }
+    }
+
+    async function resumeHandoff() {
+        if (!isExtensionContextAlive()) return;
+        const handoff = takeHandoff();
+        if (!handoff?.package?.session) return;
+        const destination = handoff.destination || getDirection()?.destination || "claude";
+        try {
+            window.IKO?.logger?.info?.("Migration", "reconnected — opening destination", { destination });
+            const adapter = createDestinationAdapter(destination);
+            await adapter.openDestination(handoff.package);
+        } catch (error) {
+            window.IKO?.logger?.error?.("Migration", "reconnect open failed", { error: String(error?.message || error) });
+        }
+    }
+
     function createSourceAdapter(id) {
         const core = window.IKOMigrationCore;
         // precise parsers where we have them, universal fallback everywhere else
@@ -144,11 +194,23 @@ const IKOComposer = require("../composer-io.js");
                 lastResult = result;
                 return { session: result.session, migrationPackage: result.migrationPackage };
             },
-            onOpenDestination: async (_destination, migrationPackage) => {
+            onOpenDestination: async (destination, migrationPackage) => {
                 // Use the package the UI hands us — freshly prepared OR loaded
                 // from the saved library — falling back to the last prepared one.
                 const pkg = migrationPackage?.session ? migrationPackage : lastResult?.migrationPackage;
                 if (!pkg?.session) throw new Error("Migration package is not ready — click Prepare Migration or load a saved session first.");
+
+                // Stale link (IKO was reloaded while this tab stayed open): a
+                // refresh is the only way to reconnect. Remember the package,
+                // then reload — resumeHandoff() opens the destination once the
+                // link is live and the destination bar appears as normal.
+                if (!isExtensionContextAlive()) {
+                    stashHandoff(destination || currentDestination, pkg);
+                    try { window.IKO?.logger?.warn?.("Migration", "extension context stale — refreshing to reconnect", { destination: destination || currentDestination }); } catch { /* ignore */ }
+                    setTimeout(() => { try { location.reload(); } catch { /* ignore */ } }, 400);
+                    return { status: "reconnecting" };
+                }
+
                 const result = await engine.prepareDestination(pkg);
                 if (!result.success) throw result.error;
                 lastResult = { migrationPackage: pkg };
@@ -372,7 +434,10 @@ const IKOComposer = require("../composer-io.js");
     }
 
     function checkPendingMigration() {
-        if (!globalThis.chrome?.runtime?.sendMessage) return;
+        // A stale content script (IKO reloaded under an open tab) has no live
+        // link — skip the poll instead of logging an error every 1.5s. The
+        // page refresh that reconnects also restarts this interval.
+        if (!isExtensionContextAlive()) return;
 
         try {
             chrome.runtime.sendMessage(
@@ -401,6 +466,9 @@ const IKOComposer = require("../composer-io.js");
         } catch { /* ignore */ }
         createLauncher();
         console.log("[IKO Migration] Ready:", getDirection());
+        // If a previous "Open destination" click refreshed the page to
+        // reconnect, finish that hand-off now that messaging works again.
+        setTimeout(resumeHandoff, 900);
         setTimeout(checkPendingMigration, 1200);
         setInterval(checkPendingMigration, 1500);
     }
