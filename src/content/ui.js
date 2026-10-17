@@ -651,7 +651,6 @@ window.IKO.ui = {
     }
 
     if (loading) {
-
       /*
        * Show loading row.
        */
@@ -680,12 +679,25 @@ window.IKO.ui = {
 
       this.position();
 
+      /*
+       * Safety net: never leave the HUD stuck
+       * counting, even if something downstream
+       * throws before the finally block runs.
+       */
+      clearTimeout(this._loadingSafetyTimer);
+      this._loadingSafetyTimer = setTimeout(() => {
+        try { this.setLoading(false); } catch { /* ignore */ }
+        try { window.IKO.ui.countingReset?.(); } catch { /* ignore */ }
+      }, 8000);
+
       return;
     }
 
     /*
      * Stop loading.
      */
+    clearTimeout(this._loadingSafetyTimer);
+
     loadingElement.hidden =
       true;
 

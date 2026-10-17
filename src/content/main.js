@@ -10,6 +10,11 @@ window.IKO = window.IKO || {};
 let timer = null;
 let counting = false;
 
+function resetCounting() {
+    counting = false;
+}
+window.IKO.resetCounting = resetCounting;
+
 function detectPlatform() {
     try {
         const d = window.IKO?.platform?.detect?.();
