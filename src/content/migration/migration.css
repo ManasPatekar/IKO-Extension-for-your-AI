@@ -1,5 +1,58 @@
+/* =============================================================
+   IKO — RETRO ARCADE DESIGN SYSTEM (tokens)
+   Duplicated from style.css so this stylesheet is self-contained
+   even when injected/loaded on its own.
+   ============================================================= */
+
+:root {
+    --iko-black: #000000;
+    --iko-white: #ffffff;
+
+    --iko-sky: #91c9fa;
+    --iko-yellow: #ffd60a;
+    --iko-pink: #ff5eaa;
+    --iko-lime: #a3f542;
+    --iko-grass: #83d84f;
+    --iko-beige: #e5bf83;
+    --iko-red: #ff4d4d;
+
+    --iko-bg: #91c9fa;
+    --iko-surface: #ffffff;
+    --iko-surface-muted: #f5f5f5;
+
+    --iko-border: 3px solid var(--iko-black);
+    --iko-border-thin: 2px solid var(--iko-black);
+
+    --iko-shadow-sm: 3px 3px 0 var(--iko-black);
+    --iko-shadow-md: 5px 5px 0 var(--iko-black);
+    --iko-shadow-lg: 8px 8px 0 var(--iko-black);
+    --iko-shadow-hover: 3px 3px 0 var(--iko-black);
+    --iko-shadow-pressed: 0 0 0 var(--iko-black);
+
+    --iko-radius: 0px;
+    --iko-radius-small: 2px;
+
+    --iko-fast: 100ms ease-out;
+    --iko-normal: 160ms ease-out;
+
+    --iko-font-display:
+        "Barlow Condensed", "Arial Narrow", Impact, "Haettenschweiler",
+        "Franklin Gothic Bold", sans-serif;
+    --iko-font-body:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Arial, sans-serif;
+    --iko-font-mono:
+        "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+@keyframes iko-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+
+
 /* ================================
-   IKO MIGRATION ROOT
+   MIGRATION ROOT (overlay)
 ================================ */
 
 #iko-migration-panel {
@@ -18,7 +71,7 @@
     align-items: center !important;
     justify-content: center !important;
 
-    background: rgba(0, 0, 0, 0.48) !important;
+    background: rgba(0, 0, 0, 0.55) !important;
 
     z-index: 2147483646 !important;
 
@@ -26,13 +79,20 @@
     visibility: hidden;
 
     transition:
-        opacity 0.15s ease,
-        visibility 0.15s ease !important;
+        opacity 150ms ease-out,
+        visibility 150ms ease-out !important;
 }
 
 #iko-migration-panel.iko-migration-visible {
     opacity: 1 !important;
     visibility: visible !important;
+}
+
+/* hidden attribute always wins inside our surfaces */
+#iko-migration-panel [hidden],
+#iko-optimizer-panel [hidden],
+#iko-attachments-panel [hidden] {
+    display: none !important;
 }
 
 
@@ -43,8 +103,8 @@
 #iko-migration-panel .iko-migration-panel {
     position: relative !important;
 
-    width: min(460px, 92vw) !important;
-    max-height: min(680px, 88vh) !important;
+    width: min(480px, 92vw) !important;
+    max-height: min(700px, 88vh) !important;
 
     margin: 0 !important;
     padding: 0 !important;
@@ -56,38 +116,22 @@
 
     overflow: hidden !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.12) !important;
+    border: var(--iko-border) !important;
+    border-radius: var(--iko-radius) !important;
 
-    border-radius: 18px !important;
+    background: var(--iko-surface) !important;
+    color: var(--iko-black) !important;
 
-    background:
-        rgb(24, 24, 27) !important;
-    background:
-        rgba(24, 24, 27, 1) !important;
+    font-family: var(--iko-font-body) !important;
 
-    color: #f5f5f5 !important;
+    box-shadow: var(--iko-shadow-lg) !important;
 
-    font-family:
-        Inter,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        sans-serif !important;
-
-    box-shadow:
-        0 25px 80px rgba(0, 0, 0, 0.55) !important;
-
-    transform:
-        translateY(10px) scale(0.98);
-
-    transition:
-        transform 0.15s ease !important;
+    transform: translate(3px, 3px);
+    transition: transform var(--iko-normal) !important;
 }
 
 #iko-migration-panel.iko-migration-visible .iko-migration-panel {
-    transform:
-        translateY(0) scale(1);
+    transform: translate(0, 0);
 }
 
 
@@ -97,17 +141,18 @@
 
 .iko-migration-header {
     display: flex !important;
-    align-items: flex-start !important;
+    align-items: center !important;
     justify-content: space-between !important;
 
     flex: 0 0 auto !important;
 
-    gap: 16px !important;
+    gap: 14px !important;
 
-    padding: 20px 20px 16px !important;
+    padding: 12px 14px !important;
 
-    border-bottom:
-        1px solid rgba(255, 255, 255, 0.08) !important;
+    border-bottom: var(--iko-border) !important;
+
+    background: var(--iko-yellow) !important;
 }
 
 .iko-migration-header-text {
@@ -115,22 +160,27 @@
 }
 
 .iko-migration-title {
-    font-size: 16px !important;
-    font-weight: 700 !important;
+    font-family: var(--iko-font-display) !important;
 
-    line-height: 1.3 !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
 
-    color: #ffffff !important;
+    line-height: 1 !important;
+
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-migration-subtitle {
     margin-top: 5px !important;
 
     font-size: 11px !important;
-    line-height: 1.45 !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
 
-    color:
-        rgba(255, 255, 255, 0.80) !important;
+    color: var(--iko-black) !important;
 }
 
 .iko-migration-close {
@@ -139,26 +189,38 @@
 
     flex: 0 0 32px !important;
 
-    border: 0 !important;
-    border-radius: 8px !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
 
-    background:
-        rgba(255, 255, 255, 0.06) !important;
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
 
-    color:
-        rgba(255, 255, 255, 0.70) !important;
-
-    font-size: 22px !important;
+    font-size: 18px !important;
+    font-weight: 900 !important;
     line-height: 1 !important;
 
     cursor: pointer !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
+
+    transition:
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast) !important;
 }
 
 .iko-migration-close:hover {
-    background:
-        rgba(255, 255, 255, 0.11) !important;
+    transform: translate(2px, 2px) !important;
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
+}
 
-    color: #ffffff !important;
+.iko-migration-close:active {
+    transform: translate(3px, 3px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
+
+.iko-migration-close:focus-visible {
+    outline: 3px dashed var(--iko-black) !important;
+    outline-offset: 3px !important;
 }
 
 
@@ -173,12 +235,14 @@
     flex: 1 1 auto !important;
     min-height: 0 !important;
 
-    padding: 20px !important;
+    padding: 14px !important;
 
     max-height: none !important;
 
     overflow-y: auto !important;
     overscroll-behavior: contain !important;
+
+    background: var(--iko-white) !important;
 }
 
 
@@ -187,19 +251,21 @@
 ================================ */
 
 .iko-migration-field {
-    margin-bottom: 16px !important;
+    margin-bottom: 14px !important;
 }
 
 .iko-migration-label {
     display: block !important;
 
-    margin-bottom: 7px !important;
+    margin-bottom: 6px !important;
 
-    font-size: 11px !important;
-    font-weight: 600 !important;
+    font-size: 10px !important;
+    font-weight: 800 !important;
 
-    color:
-        rgba(255, 255, 255, 0.58) !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-migration-select {
@@ -208,53 +274,46 @@
     width: 100% !important;
     height: 42px !important;
 
-    padding: 0 12px !important;
+    padding: 0 11px !important;
 
     box-sizing: border-box !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.11) !important;
-
-    border-radius: 10px !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
 
     outline: none !important;
 
-    background:
-        rgba(255, 255, 255, 0.055) !important;
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
 
-    color: #ffffff !important;
-
+    font-family: var(--iko-font-body) !important;
     font-size: 12px !important;
+    font-weight: 600 !important;
 
     cursor: pointer !important;
 
-    color-scheme: dark !important;
+    color-scheme: light !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
 
     transition:
-        border-color 0.15s ease,
-        background 0.15s ease,
-        box-shadow 0.15s ease !important;
+        box-shadow var(--iko-fast),
+        transform var(--iko-fast),
+        background 0.15s ease !important;
 }
 
 .iko-migration-select option {
-    background-color: #242428 !important;
-    color: #ffffff !important;
+    background-color: var(--iko-white) !important;
+    color: var(--iko-black) !important;
 }
 
 .iko-migration-select::placeholder {
-    color:
-        rgba(255, 255, 255, 0.32) !important;
+    color: #8a8a8a !important;
 }
 
 .iko-migration-select:focus {
-    border-color:
-        rgba(255, 255, 255, 0.28) !important;
-
-    background:
-        rgba(255, 255, 255, 0.07) !important;
-
-    box-shadow:
-        0 0 0 3px rgba(255, 255, 255, 0.07) !important;
+    outline: 3px solid var(--iko-pink) !important;
+    outline-offset: 2px !important;
 }
 
 
@@ -264,19 +323,18 @@
 
 .iko-migration-info {
     margin-top: 4px !important;
-    margin-bottom: 16px !important;
+    margin-bottom: 14px !important;
 
-    padding: 11px 12px !important;
+    padding: 10px 12px !important;
 
-    border-radius: 9px !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
 
-    background:
-        rgba(255, 255, 255, 0.045) !important;
-
-    color:
-        rgba(255, 255, 255, 0.48) !important;
+    background: var(--iko-sky) !important;
+    color: var(--iko-black) !important;
 
     font-size: 10px !important;
+    font-weight: 600 !important;
     line-height: 1.5 !important;
 }
 
@@ -286,48 +344,40 @@
 ================================ */
 
 .iko-migration-status {
-    min-height: 36px !important;
+    min-height: 38px !important;
 
-    margin-bottom: 16px !important;
+    margin-bottom: 14px !important;
 
     padding: 10px 12px !important;
 
-    border-radius: 9px !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
 
-    font-size: 10px !important;
-    line-height: 1.4 !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 1.45 !important;
+
+    white-space: pre-line !important;
 }
 
 .iko-status-info {
-    background:
-        rgba(255, 255, 255, 0.045) !important;
-
-    color:
-        rgba(255, 255, 255, 0.55) !important;
+    background: var(--iko-surface-muted) !important;
+    color: var(--iko-black) !important;
 }
 
 .iko-status-loading {
-    background:
-        rgba(255, 255, 255, 0.07) !important;
-
-    color:
-        rgba(255, 255, 255, 0.80) !important;
+    background: var(--iko-yellow) !important;
+    color: var(--iko-black) !important;
 }
 
 .iko-status-success {
-    background:
-        rgba(90, 180, 110, 0.12) !important;
-
-    color:
-        rgba(170, 235, 180, 0.90) !important;
+    background: var(--iko-lime) !important;
+    color: var(--iko-black) !important;
 }
 
 .iko-status-error {
-    background:
-        rgba(220, 80, 80, 0.12) !important;
-
-    color:
-        rgba(255, 170, 170, 0.95) !important;
+    background: var(--iko-red) !important;
+    color: var(--iko-black) !important;
 }
 
 
@@ -336,26 +386,30 @@
 ================================ */
 
 .iko-migration-review {
-    margin-bottom: 16px !important;
+    margin-bottom: 14px !important;
 
-    padding: 13px !important;
+    padding: 12px !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.08) !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
 
-    border-radius: 10px !important;
+    background: var(--iko-surface-muted) !important;
 
-    background:
-        rgba(255, 255, 255, 0.035) !important;
+    box-shadow: var(--iko-shadow-sm) !important;
 }
 
 .iko-review-title {
     margin-bottom: 10px !important;
 
-    font-size: 11px !important;
-    font-weight: 700 !important;
+    font-family: var(--iko-font-display) !important;
 
-    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-review-row {
@@ -368,8 +422,7 @@
 
     min-height: 28px !important;
 
-    border-bottom:
-        1px solid rgba(255, 255, 255, 0.045) !important;
+    border-bottom: 2px dashed rgba(0, 0, 0, 0.22) !important;
 }
 
 .iko-review-row:last-child {
@@ -377,10 +430,13 @@
 }
 
 .iko-review-label {
-    color:
-        rgba(255, 255, 255, 0.75) !important;
+    color: #333333 !important;
 
     font-size: 10px !important;
+    font-weight: 700 !important;
+
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
 }
 
 .iko-review-value {
@@ -389,238 +445,231 @@
     overflow: hidden !important;
 
     text-overflow: ellipsis !important;
-
     white-space: nowrap !important;
 
-    color:
-        rgba(255, 255, 255, 1) !important;
+    color: var(--iko-black) !important;
 
-    font-size: 10px !important;
-}
-
-
-
-
-.iko-migration-direction {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 10px !important;
-    margin: 0 0 16px !important;
-    padding: 10px 12px !important;
-    border: 1px solid rgba(255,255,255,.08) !important;
-    border-radius: 10px !important;
-    background: rgba(255,255,255,.035) !important;
     font-size: 11px !important;
-}
-
-.iko-direction-source,
-.iko-direction-destination {
-    color: rgba(255,255,255,.78) !important;
-    font-weight: 600 !important;
-}
-
-.iko-direction-arrow {
-    display: inline-flex !important;
-    align-items: center !important;
-
-    color:
-        rgba(255, 255, 255, 0.30) !important;
-}
-
-.iko-direction-arrow svg {
-    display: block !important;
-}
-
-.iko-migration-card {
-    margin-bottom: 10px !important;
-    padding: 12px !important;
-    border: 1px solid rgba(255,255,255,.08) !important;
-    border-radius: 10px !important;
-    background: rgba(255,255,255,.035) !important;
-}
-
-.iko-card-label {
-    margin-bottom: 5px !important;
-    color: rgba(255,255,255,.38) !important;
-    font-size: 9px !important;
     font-weight: 700 !important;
-    letter-spacing: .08em !important;
-}
-
-.iko-card-title {
-    color: rgba(255,255,255,.88) !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-}
-
-.iko-card-description {
-    margin-top: 3px !important;
-    color: rgba(255,255,255,.38) !important;
-    font-size: 9px !important;
-}
-
-.iko-review-integrity {
-    margin-top: 10px !important;
-    padding-top: 9px !important;
-    border-top: 1px solid rgba(255,255,255,.06) !important;
-    color: rgba(110,231,183,.85) !important;
-    font-size: 10px !important;
 }
 
 
 /* ================================
-   BUTTONS
+   DIRECTION
+================================ */
+
+.iko-migration-direction {
+    display: flex !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    gap: 10px !important;
+
+    margin: 0 0 14px !important;
+
+    padding: 9px 12px !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-sky) !important;
+}
+
+.iko-direction-source,
+.iko-direction-destination {
+    color: var(--iko-black) !important;
+
+    font-size: 11px !important;
+    font-weight: 800 !important;
+
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+}
+
+.iko-direction-arrow {
+    display: inline-flex !important;
+
+    align-items: center !important;
+
+    color: var(--iko-black) !important;
+}
+
+.iko-direction-arrow svg {
+    display: block !important;
+
+    stroke-width: 2.5 !important;
+}
+
+
+/* ================================
+   CARD
+================================ */
+
+.iko-migration-card {
+    margin-bottom: 10px !important;
+
+    padding: 11px !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-white) !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
+}
+
+.iko-card-label {
+    margin-bottom: 5px !important;
+
+    color: var(--iko-black) !important;
+
+    font-size: 9px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+}
+
+.iko-card-title {
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-display) !important;
+
+    font-size: 18px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+}
+
+.iko-card-description {
+    margin-top: 3px !important;
+
+    color: #444444 !important;
+
+    font-size: 10px !important;
+}
+
+.iko-review-integrity {
+    margin-top: 10px !important;
+
+    padding-top: 9px !important;
+
+    border-top: var(--iko-border-thin) !important;
+
+    color: var(--iko-black) !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+}
+
+
+/* ================================
+   BUTTONS (shared system)
 ================================ */
 
 .iko-migration-actions {
     display: flex !important;
-
     gap: 9px !important;
-
     margin-top: 4px !important;
 }
 
 .iko-migration-button {
-    height: 40px !important;
+    height: 42px !important;
 
-    padding: 0 15px !important;
+    padding: 0 16px !important;
 
-    border-radius: 10px !important;
+    border: var(--iko-border) !important;
+    border-radius: var(--iko-radius) !important;
 
-    font-size: 11px !important;
-    font-weight: 600 !important;
+    font-family: var(--iko-font-body) !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+
+    letter-spacing: 0.02em !important;
 
     cursor: pointer !important;
 
+    box-shadow: var(--iko-shadow-md) !important;
+
     transition:
-        background 0.15s ease,
-        border-color 0.15s ease,
-        color 0.15s ease,
-        opacity 0.15s ease,
-        filter 0.15s ease !important;
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast),
+        background-color var(--iko-fast),
+        color var(--iko-fast) !important;
+}
+
+.iko-migration-button:hover:not(:disabled) {
+    transform: translate(2px, 2px) !important;
+    box-shadow: var(--iko-shadow-sm) !important;
+}
+
+.iko-migration-button:active:not(:disabled) {
+    transform: translate(5px, 5px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
+
+.iko-migration-button:focus-visible {
+    outline: 3px dashed var(--iko-black) !important;
+    outline-offset: 4px !important;
+}
+
+.iko-migration-button:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+    box-shadow: var(--iko-shadow-sm) !important;
 }
 
 .iko-migration-button.secondary {
     flex: 0 0 auto !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.10) !important;
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+}
 
-    background:
-        rgba(255, 255, 255, 0.05) !important;
-
-    color:
-        rgba(255, 255, 255, 0.68) !important;
+.iko-migration-button.secondary:hover:not(:disabled) {
+    background: var(--iko-sky) !important;
 }
 
 .iko-migration-button.primary {
-    flex: 1 !important;
+    flex: 1 1 auto !important;
 
-    border: 0 !important;
+    background: var(--iko-yellow) !important;
+    color: var(--iko-black) !important;
+}
 
-    background:
-        rgba(255, 255, 255, 0.12) !important;
-
-    color: #ffffff !important;
+.iko-migration-button.primary:hover:not(:disabled) {
+    background: #ffdf3d !important;
 }
 
 .iko-migration-button.destination {
     width: 100% !important;
+    height: 46px !important;
 
-    margin-top: 9px !important;
+    margin-top: 10px !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.10) !important;
-
-    background:
-        rgba(255, 255, 255, 0.055) !important;
-
-    color:
-        rgba(255, 255, 255, 0.78) !important;
+    background: var(--iko-pink) !important;
+    color: var(--iko-black) !important;
 }
 
-.iko-migration-button:hover:not(:disabled) {
-    filter: brightness(1.18) !important;
-}
-
-.iko-migration-button.secondary:hover:not(:disabled) {
-    filter: none !important;
-
-    background:
-        rgba(255, 255, 255, 0.10) !important;
-
-    border-color:
-        rgba(255, 255, 255, 0.17) !important;
-
-    color:
-        rgba(255, 255, 255, 0.92) !important;
-}
-
-.iko-migration-button:disabled {
-    opacity: 0.40 !important;
-
-    cursor: not-allowed !important;
+.iko-migration-button.destination:hover:not(:disabled) {
+    background: #ff7bbc !important;
 }
 
 
 /* ================================
-   LAUNCHER
+   LEGACY LAUNCHER (hidden)
 ================================ */
 
 #iko-migration-launcher {
-    position: fixed !important;
-
-    right: 22px !important;
-    bottom: 22px !important;
-
-    width: auto !important;
-    min-width: 108px !important;
-    height: 38px !important;
-
-    padding: 0 15px !important;
-
-    box-sizing: border-box !important;
-
-    border:
-        1px solid rgba(255, 255, 255, 0.13) !important;
-
-    border-radius: 10px !important;
-
-    background:
-        rgba(24, 24, 27, 0.96) !important;
-
-    color:
-        rgba(255, 255, 255, 0.82) !important;
-
-    font-family:
-        Inter,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        sans-serif !important;
-
-    font-size: 11px !important;
-    font-weight: 600 !important;
-
-    box-shadow:
-        0 8px 25px rgba(0, 0, 0, 0.30) !important;
-
-    cursor: pointer !important;
-
-    z-index: 2147483645 !important;
-}
-
-#iko-migration-launcher:hover {
-    background:
-        rgba(38, 38, 42, 0.98) !important;
-
-    color: #ffffff !important;
+    display: none !important;
 }
 
 
 /* ================================
-   MOBILE
+   RESPONSIVE
 ================================ */
 
 @media (max-width: 600px) {
@@ -636,62 +685,120 @@
     .iko-migration-body {
         max-height: none !important;
     }
-
-    #iko-migration-launcher {
-        right: 14px !important;
-        bottom: 14px !important;
-    }
 }
+
+
+/* ================================
+   PENDING MIGRATION BAR
+================================ */
 
 #iko-pending-migration {
     position: fixed !important;
+
     left: 50% !important;
     bottom: 22px !important;
+
     transform: translateX(-50%) !important;
+
     z-index: 2147483647 !important;
+
     display: flex !important;
     align-items: center !important;
     gap: 12px !important;
+
     max-width: min(720px, calc(100vw - 32px)) !important;
-    padding: 10px 12px 10px 14px !important;
-    border: 1px solid rgba(255,255,255,.12) !important;
-    border-radius: 13px !important;
-    background: rgba(22,22,25,.96) !important;
-    color: #fff !important;
-    box-shadow: 0 14px 45px rgba(0,0,0,.35) !important;
-    backdrop-filter: blur(18px) !important;
-    font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
+
+    padding: 10px 10px 10px 14px !important;
+
+    box-sizing: border-box !important;
+
+    border: var(--iko-border) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-yellow) !important;
+    color: var(--iko-black) !important;
+
+    box-shadow: var(--iko-shadow-md) !important;
+
+    font-family: var(--iko-font-body) !important;
 }
 
 #iko-pending-migration > div {
     display: flex !important;
+
     flex-direction: column !important;
+
     min-width: 0 !important;
-    flex: 1 !important;
+
+    flex: 1 1 auto !important;
 }
 
 #iko-pending-migration strong {
-    font-size: 11px !important;
+    font-family: var(--iko-font-display) !important;
+
+    font-size: 16px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
 }
 
 #iko-pending-migration span {
     margin-top: 2px !important;
+
     overflow: hidden !important;
+
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
-    color: rgba(255,255,255,.48) !important;
-    font-size: 9px !important;
+
+    color: var(--iko-black) !important;
+
+    font-size: 10px !important;
+    font-weight: 600 !important;
 }
 
 #iko-pending-migration button {
-    border: 1px solid rgba(255,255,255,.1) !important;
-    border-radius: 8px !important;
-    padding: 8px 11px !important;
-    background: rgba(255,255,255,.08) !important;
-    color: #fff !important;
-    font-size: 10px !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    padding: 9px 12px !important;
+
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-body) !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+
     cursor: pointer !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
+
+    transition:
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast),
+        background-color var(--iko-fast) !important;
 }
+
+#iko-pending-migration button:hover {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
+}
+
+#iko-pending-migration button:active {
+    transform: translate(3px, 3px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
+
+#iko-pending-migration button:last-child {
+    min-width: 32px !important;
+    padding: 9px 8px !important;
+
+    background: var(--iko-pink) !important;
+}
+
 
 /* ================================
    LOGS VIEWER
@@ -700,36 +807,29 @@
 .iko-migration-logs {
     margin-top: 12px !important;
 
-    padding: 11px 12px !important;
+    padding: 10px 12px !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.09) !important;
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
 
-    border-radius: 12px !important;
+    background: var(--iko-white) !important;
 
-    background:
-        rgba(255, 255, 255, 0.028) !important;
+    box-shadow: var(--iko-shadow-sm) !important;
 
-    transition:
-        border-color 0.15s ease,
-        background 0.15s ease !important;
+    transition: box-shadow var(--iko-fast) !important;
 }
 
 .iko-migration-logs:hover {
-    border-color:
-        rgba(255, 255, 255, 0.13) !important;
+    box-shadow: var(--iko-shadow-md) !important;
 }
 
 .iko-migration-logs[open] {
-    border-color:
-        rgba(255, 255, 255, 0.12) !important;
-
-    background:
-        rgba(255, 255, 255, 0.038) !important;
+    background: var(--iko-surface-muted) !important;
 }
 
 .iko-logs-summary {
     display: flex !important;
+
     align-items: center !important;
 
     gap: 9px !important;
@@ -739,21 +839,20 @@
     cursor: pointer !important;
     user-select: none !important;
 
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    letter-spacing: -0.005em !important;
+    font-family: var(--iko-font-body) !important;
+    font-size: 11px !important;
+    font-weight: 900 !important;
 
-    color:
-        rgba(255, 255, 255, 0.82) !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
 
-    transition: color 0.15s ease !important;
+    color: var(--iko-black) !important;
 }
 
 .iko-logs-summary:hover {
-    color: #ffffff !important;
+    color: var(--iko-black) !important;
 }
 
-/* custom chevron (replaces the native triangle) */
 .iko-logs-summary::-webkit-details-marker {
     display: none !important;
 }
@@ -767,132 +866,150 @@
 
     flex: 0 0 auto !important;
 
-    width: 5px !important;
-    height: 5px !important;
+    width: 0;
+    height: 0;
 
-    margin-left: 2px !important;
+    border-left: 6px solid var(--iko-black) !important;
+    border-top: 5px solid transparent !important;
+    border-bottom: 5px solid transparent !important;
 
-    border-right:
-        1.5px solid rgba(255, 255, 255, 0.42) !important;
-
-    border-bottom:
-        1.5px solid rgba(255, 255, 255, 0.42) !important;
-
-    transform: rotate(-45deg) !important;
-
-    transition:
-        transform 0.15s ease,
-        border-color 0.15s ease !important;
+    transition: transform var(--iko-fast) !important;
 }
 
-.iko-migration-logs[open] > .iko-logs-summary::before {
-    transform: rotate(45deg) !important;
-
-    border-color:
-        rgba(255, 255, 255, 0.68) !important;
+.iko-migration-logs[open] > .iko-logs-summary::before,
+.iko-review-pick[open] > .iko-logs-summary::before {
+    transform: rotate(90deg) !important;
 }
 
-.iko-migration-logs[open] > .iko-logs-summary {
+.iko-migration-logs[open] > .iko-logs-summary,
+.iko-review-pick[open] > .iko-logs-summary {
     margin-bottom: 9px !important;
-
     padding-bottom: 8px !important;
 
-    border-bottom:
-        1px solid rgba(255, 255, 255, 0.07) !important;
+    border-bottom: var(--iko-border-thin) !important;
 }
 
 .iko-logs-pre {
     margin: 9px 0 4px !important;
+
     max-height: 180px !important;
+
     overflow: auto !important;
+
+    padding: 8px 10px !important;
+
+    border: var(--iko-border-thin) !important;
+
+    background: #111111 !important;
+    color: #e8e8e8 !important;
+
     white-space: pre-wrap !important;
     word-break: break-word !important;
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace !important;
-    font-size: 9.5px !important;
-    line-height: 1.55 !important;
-    color: rgba(255,255,255,.52) !important;
+
+    font-family: var(--iko-font-mono) !important;
+    font-size: 10px !important;
+    line-height: 1.5 !important;
 }
 
 .iko-logs-row {
     display: flex !important;
+
     align-items: center !important;
+
     gap: 8px !important;
+
+    flex-wrap: wrap !important;
+
+    margin-top: 8px !important;
 }
 
 .iko-logs-copy {
     height: 30px !important;
-    padding: 0 12px !important;
-    font-size: 10px !important;
 
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
+    padding: 0 11px !important;
+
+    font-size: 10px !important;
 }
 
 .iko-logs-copy svg {
     flex: 0 0 auto !important;
+
     display: block !important;
 
-    opacity: 0.72 !important;
-
-    transition: opacity 0.15s ease !important;
-}
-
-.iko-logs-copy:hover svg {
     opacity: 1 !important;
 }
 
-/* ---- question box (QASC) ---- */
 .iko-qasc input.iko-migration-select {
-    cursor: text !important;
-
     height: 36px !important;
 
-    margin: 2px 0 8px !important;
+    margin-bottom: 2px !important;
 }
 
 .iko-qasc .iko-logs-pre {
-    max-height: 200px !important;
-
-    padding: 8px 10px !important;
-
-    border-radius: 9px !important;
-
-    background:
-        rgba(0, 0, 0, 0.22) !important;
+    margin-top: 9px !important;
 }
 
-/* ---- saved sessions library ---- */
-.iko-review-pick { margin-top: 10px !important; }
+
+/* ================================
+   SESSION LIBRARY / PICK LIST
+================================ */
+
+.iko-review-pick {
+    margin-top: 10px !important;
+}
+
 .iko-pick-list {
     display: flex !important;
+
     flex-direction: column !important;
+
     gap: 6px !important;
+
     margin-top: 8px !important;
+
     max-height: min(45vh, 360px) !important;
+
     overflow: auto !important;
-    font-size: 11px !important;
-    color: rgba(255,255,255,.78) !important;
+
+    color: var(--iko-black) !important;
 }
-.iko-pick-row { display: flex !important; gap: 8px !important; align-items: flex-start !important; font-size: 10px !important; color: rgba(255,255,255,.92) !important; cursor: pointer !important; }
-.iko-pick-row input { margin-top: 2px !important; accent-color: #6ee7b7 !important; }
+
+.iko-pick-row {
+    display: flex !important;
+
+    gap: 8px !important;
+
+    align-items: flex-start !important;
+
+    font-size: 10px !important;
+
+    color: var(--iko-black) !important;
+
+    cursor: pointer !important;
+}
+
+.iko-pick-row input {
+    margin-top: 2px !important;
+
+    width: 14px !important;
+    height: 14px !important;
+
+    accent-color: var(--iko-pink) !important;
+}
 
 .iko-library-empty {
     display: block !important;
 
     padding: 14px 12px !important;
 
-    border:
-        1px dashed rgba(255, 255, 255, 0.10) !important;
-
-    border-radius: 10px !important;
+    border: 2px dashed var(--iko-black) !important;
 
     text-align: center !important;
 
     font-size: 11px !important;
+    font-weight: 700 !important;
 
-    color:
-        rgba(255, 255, 255, 0.40) !important;
+    color: #555555 !important;
 }
 
 .iko-pick-list .iko-review-row {
@@ -900,119 +1017,106 @@
 
     padding: 7px 9px !important;
 
-    border:
-        1px solid rgba(255, 255, 255, 0.07) !important;
+    border: var(--iko-border-thin) !important;
 
-    border-radius: 10px !important;
+    border-bottom: var(--iko-border-thin) !important;
 
-    background:
-        rgba(255, 255, 255, 0.03) !important;
+    background: var(--iko-white) !important;
+
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
 
     transition:
-        border-color 0.15s ease,
-        background 0.15s ease !important;
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast) !important;
 }
 
 .iko-pick-list .iko-review-row:hover {
-    border-color:
-        rgba(255, 255, 255, 0.13) !important;
-
-    background:
-        rgba(255, 255, 255, 0.05) !important;
+    transform: translate(1px, 1px) !important;
+    box-shadow: 1px 1px 0 var(--iko-black) !important;
 }
 
 .iko-pick-list .iko-review-label {
     flex: 1 1 auto !important;
+
     min-width: 0 !important;
 
     overflow: hidden !important;
+
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
 
-    font-size: 10.5px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
 
-    color:
-        rgba(255, 255, 255, 0.82) !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-pick-list .iko-logs-row {
     flex: 0 0 auto !important;
+
+    margin-top: 0 !important;
 }
 
 .iko-pick-list .iko-logs-copy {
     height: 26px !important;
 
-    padding: 0 10px !important;
+    padding: 0 9px !important;
 
     font-size: 10px !important;
 }
 
+
 /* ================================
-   PROMPT OPTIMIZER
+   OPTIMIZER LAUNCHER (hidden)
 ================================ */
 
 #iko-optimizer-launcher {
-    position: fixed !important;
-    left: 22px !important;
-    bottom: 22px !important;
-    height: 38px !important;
-    padding: 0 15px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 7px !important;
-    border: 1px solid rgba(255,255,255,.13) !important;
-    border-radius: 10px !important;
-    background: rgba(24,24,27,.96) !important;
-    color: rgba(255,255,255,.82) !important;
-    font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    box-shadow: 0 8px 25px rgba(0,0,0,.30) !important;
-    cursor: pointer !important;
-    z-index: 2147483645 !important;
+    display: none !important;
 }
 
-#iko-optimizer-launcher:hover { background: rgba(38,38,42,.98) !important; color: #fff !important; }
+
+/* ================================
+   OPTIMIZER WINDOW
+================================ */
 
 #iko-optimizer-panel {
     position: fixed !important;
     inset: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: rgb(0,0,0) !important;
-    background: rgba(0,0,0,.68) !important;
-    z-index: 2147483646 !important;
-    padding: 24px !important;
-    box-sizing: border-box !important;
-    isolation: isolate !important;
-}
 
-#iko-attachments-panel {
-    position: fixed !important;
-    inset: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    background: rgb(0,0,0) !important;
-    background: rgba(0,0,0,.68) !important;
+
+    background: rgba(0, 0, 0, 0.55) !important;
+
     z-index: 2147483646 !important;
+
     padding: 24px !important;
+
     box-sizing: border-box !important;
+
     isolation: isolate !important;
 }
 
 #iko-optimizer-panel .iko-optimizer-panel {
     width: min(560px, 94vw) !important;
     max-height: min(720px, 90vh) !important;
+
     overflow: auto !important;
-    border: 1px solid rgba(255,255,255,.14) !important;
-    border-radius: 18px !important;
-    background: rgb(24,24,27) !important;
-    background: rgba(24,24,27,1) !important;
-    color: #f5f5f5 !important;
-    font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
-    box-shadow: 0 25px 80px rgba(0,0,0,.65) !important;
+
+    border: var(--iko-border) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-surface) !important;
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-body) !important;
+
+    box-shadow: var(--iko-shadow-lg) !important;
+
     isolation: isolate !important;
 }
 
@@ -1020,236 +1124,566 @@
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding: 18px 18px 14px !important;
-    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+
+    gap: 12px !important;
+
+    padding: 12px 14px !important;
+
+    border-bottom: var(--iko-border) !important;
+
+    background: var(--iko-pink) !important;
 }
 
-.iko-optimizer-title { font-size: 15px !important; font-weight: 700 !important; color: #fff !important; }
+.iko-optimizer-title {
+    font-family: var(--iko-font-display) !important;
+
+    font-size: 20px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
+}
 
 .iko-optimizer-close {
-    width: 32px !important; height: 32px !important;
-    border: 0 !important; border-radius: 8px !important;
-    background: rgba(255,255,255,.06) !important;
-    color: rgba(255,255,255,.7) !important;
-    font-size: 22px !important; cursor: pointer !important;
+    width: 32px !important;
+    height: 32px !important;
+
+    flex: 0 0 32px !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+
+    cursor: pointer !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
+
+    transition:
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast) !important;
 }
 
-.iko-optimizer-body { padding: 18px !important; }
+.iko-optimizer-close:hover {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
+}
 
-.iko-optimizer-modes { display: flex !important; gap: 8px !important; margin-bottom: 12px !important; }
+.iko-optimizer-close:active {
+    transform: translate(3px, 3px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
+
+.iko-optimizer-body {
+    padding: 14px !important;
+}
+
+.iko-optimizer-modes {
+    display: flex !important;
+    gap: 8px !important;
+    margin-bottom: 12px !important;
+}
 
 .iko-optimizer-mode {
-    flex: 1 !important; height: 34px !important;
-    border: 1px solid rgba(255,255,255,.1) !important;
-    border-radius: 8px !important;
-    background: rgba(255,255,255,.05) !important;
-    color: rgba(255,255,255,.65) !important;
-    font-size: 11px !important; font-weight: 600 !important; cursor: pointer !important;
+    flex: 1 1 0 !important;
+
+    height: 36px !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-body) !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+
+    cursor: pointer !important;
+
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
+
+    transition:
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast),
+        background-color var(--iko-fast) !important;
 }
 
-.iko-optimizer-mode.active { background: rgba(255,255,255,.14) !important; color: #fff !important; }
+.iko-optimizer-mode:hover {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
 
-.iko-optimizer-score { font-size: 11px !important; color: rgba(110,231,183,1) !important; margin-bottom: 10px !important; }
+.iko-optimizer-mode.active {
+    background: var(--iko-yellow) !important;
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
+}
 
-.iko-optimizer-label { font-size: 10px !important; font-weight: 700 !important; letter-spacing: .06em !important; color: rgba(255,255,255,.85) !important; margin-bottom: 6px !important; }
+.iko-optimizer-score {
+    display: inline-block !important;
+
+    margin-bottom: 10px !important;
+
+    padding: 6px 9px !important;
+
+    border: var(--iko-border-thin) !important;
+
+    background: var(--iko-lime) !important;
+    color: var(--iko-black) !important;
+
+    font-size: 11px !important;
+    font-weight: 800 !important;
+}
+
+.iko-optimizer-label {
+    margin-bottom: 6px !important;
+
+    font-size: 10px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
+}
 
 .iko-optimizer-text {
-    width: 100% !important; box-sizing: border-box !important;
+    width: 100% !important;
+
     min-height: 180px !important;
+
     padding: 10px 12px !important;
-    border: 1px solid rgba(255,255,255,.1) !important;
-    border-radius: 10px !important;
-    background: rgba(0,0,0,.35) !important;
-    color: #fff !important;
-    font-size: 12px !important; line-height: 1.55 !important;
-    font-family: ui-monospace, Consolas, monospace !important;
+
+    box-sizing: border-box !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-mono) !important;
+    font-size: 12px !important;
+    line-height: 1.55 !important;
+
     resize: vertical !important;
-    color-scheme: dark !important;
+
+    color-scheme: light !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
 }
 
-.iko-optimizer-tips { margin: 10px 0 0 16px !important; padding: 0 !important; color: rgba(255,255,255,.88) !important; font-size: 10px !important; line-height: 1.6 !important; }
+.iko-optimizer-text:focus {
+    outline: 3px solid var(--iko-pink) !important;
+    outline-offset: 2px !important;
+}
 
-.iko-optimizer-actions { display: flex !important; gap: 9px !important; margin-top: 14px !important; }
+.iko-optimizer-tips {
+    margin: 10px 0 0 18px !important;
+    padding: 0 !important;
+
+    color: #222222 !important;
+
+    font-size: 11px !important;
+    line-height: 1.6 !important;
+}
+
+.iko-optimizer-actions {
+    display: flex !important;
+    gap: 9px !important;
+    margin-top: 14px !important;
+}
+
 
 /* ================================
-   ATTACHMENTS (minimal card UI)
-   ================================ */
+   ATTACHMENTS / FILES POPUP
+================================ */
+
+#iko-attachments-panel {
+    position: fixed !important;
+    inset: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    background: rgba(0, 0, 0, 0.55) !important;
+
+    z-index: 2147483646 !important;
+
+    padding: 24px !important;
+
+    box-sizing: border-box !important;
+
+    isolation: isolate !important;
+}
 
 #iko-attachments-panel .iko-att {
-    width: min(480px, 94vw) !important;
-    max-height: min(640px, 90vh) !important;
+    width: min(500px, 94vw) !important;
+    max-height: min(660px, 90vh) !important;
+
     display: flex !important;
     flex-direction: column !important;
+
     overflow: hidden !important;
-    border: 1px solid rgba(255,255,255,.12) !important;
-    border-radius: 16px !important;
-    background: rgb(23,23,26) !important;
-    background: rgba(23,23,26,1) !important;
-    color: #f5f5f5 !important;
-    font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
-    box-shadow: 0 25px 80px rgba(0,0,0,.55) !important;
+
+    border: var(--iko-border) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-surface) !important;
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-body) !important;
+
+    box-shadow: var(--iko-shadow-lg) !important;
 }
 
 .iko-att-head {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
+
     gap: 12px !important;
-    padding: 14px 16px 12px !important;
-    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+
     flex: 0 0 auto !important;
+
+    padding: 12px 14px !important;
+
+    border-bottom: var(--iko-border) !important;
+
+    background: var(--iko-sky) !important;
 }
 
 .iko-att-title {
-    font-size: 13px !important;
-    font-weight: 650 !important;
-    letter-spacing: -0.01em !important;
-    color: #fff !important;
+    font-family: var(--iko-font-display) !important;
+
+    font-size: 22px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-att-count {
     display: inline-block !important;
+
     min-width: 20px !important;
-    text-align: center !important;
-    font-size: 10px !important;
-    font-weight: 700 !important;
+
+    margin-left: 6px !important;
     padding: 1px 6px !important;
-    border-radius: 999px !important;
-    background: rgba(255,255,255,.09) !important;
-    color: rgba(255,255,255,.75) !important;
-    vertical-align: 1px !important;
+
+    text-align: center !important;
+
+    border: var(--iko-border-thin) !important;
+
+    background: var(--iko-yellow) !important;
+    color: var(--iko-black) !important;
+
+    font-size: 11px !important;
+    font-weight: 900 !important;
+
+    vertical-align: 2px !important;
 }
 
 .iko-att-sub {
-    margin-top: 2px !important;
+    margin-top: 3px !important;
+
     font-size: 11px !important;
-    color: rgba(255,255,255,.48) !important;
+    font-weight: 600 !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-att-x {
-    width: 28px !important;
-    height: 28px !important;
-    flex: 0 0 28px !important;
-    border: 0 !important;
-    border-radius: 8px !important;
-    background: transparent !important;
-    color: rgba(255,255,255,.55) !important;
+    width: 30px !important;
+    height: 30px !important;
+
+    flex: 0 0 30px !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+
     font-size: 18px !important;
+    font-weight: 900 !important;
     line-height: 1 !important;
+
     cursor: pointer !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
+
+    transition:
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast) !important;
 }
 
-.iko-att-x:hover { background: rgba(255,255,255,.09) !important; color: #fff !important; }
+.iko-att-x:hover {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
 
 .iko-att-body {
     flex: 1 1 auto !important;
     min-height: 0 !important;
+
     overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+
     padding: 12px 14px 14px !important;
+
+    background: var(--iko-white) !important;
 }
 
-.iko-att-list { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+.iko-att-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 9px !important;
+}
 
 .iko-att-empty {
     padding: 18px 12px !important;
+
+    border: 2px dashed var(--iko-black) !important;
+
     text-align: center !important;
+
     font-size: 11px !important;
-    color: rgba(255,255,255,.45) !important;
+    font-weight: 700 !important;
+
+    color: #555555 !important;
 }
 
 .iko-att-card {
     min-width: 0 !important;
+
     padding: 10px 12px !important;
-    border: 1px solid rgba(255,255,255,.08) !important;
-    border-radius: 12px !important;
-    background: rgba(255,255,255,.03) !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-surface-muted) !important;
+
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
 }
 
 .iko-att-top {
     display: flex !important;
     align-items: center !important;
+
     gap: 8px !important;
+
     min-width: 0 !important;
 }
 
 .iko-att-name {
     flex: 1 1 auto !important;
+
     min-width: 0 !important;
+
     overflow: hidden !important;
+
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+
     font-size: 12px !important;
-    font-weight: 600 !important;
-    color: rgba(255,255,255,.92) !important;
+    font-weight: 800 !important;
+
+    color: var(--iko-black) !important;
 }
 
 .iko-att-tokens {
     flex: 0 0 auto !important;
-    font-size: 10px !important;
-    font-weight: 600 !important;
-    font-variant-numeric: tabular-nums !important;
+
     padding: 2px 8px !important;
-    border-radius: 999px !important;
-    background: rgba(255,255,255,.07) !important;
-    color: rgba(255,255,255,.7) !important;
+
+    border: var(--iko-border-thin) !important;
+
+    background: var(--iko-pink) !important;
+    color: var(--iko-black) !important;
+
+    font-size: 10px !important;
+    font-weight: 800 !important;
+
+    font-variant-numeric: tabular-nums !important;
     white-space: nowrap !important;
 }
 
 .iko-att-meta {
     margin-top: 3px !important;
-    font-size: 10.5px !important;
-    color: rgba(255,255,255,.42) !important;
+
     overflow: hidden !important;
+
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+
+    font-size: 10.5px !important;
+
+    color: #444444 !important;
 }
 
 .iko-att-status {
     margin-top: 6px !important;
+
+    padding: 6px 9px !important;
+
+    border: var(--iko-border-thin) !important;
+
+    background: var(--iko-lime) !important;
+    color: #111111 !important;
+
     font-size: 11px !important;
+    font-weight: 600 !important;
     line-height: 1.5 !important;
-    color: rgba(140,230,176,.92) !important;
+
     overflow-wrap: anywhere !important;
 }
 
-.iko-att-status.bad { color: rgba(255,170,170,.9) !important; }
+.iko-att-status.bad {
+    background: var(--iko-red) !important;
+    color: var(--iko-black) !important;
+}
 
 .iko-att-actions {
     display: flex !important;
+
     flex-wrap: wrap !important;
+
     gap: 6px !important;
+
     margin-top: 8px !important;
 }
 
 .iko-att-btn {
-    height: 28px !important;
+    height: 30px !important;
+
     padding: 0 10px !important;
-    border: 1px solid rgba(255,255,255,.1) !important;
-    border-radius: 8px !important;
-    background: rgba(255,255,255,.05) !important;
-    color: rgba(255,255,255,.75) !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    background: var(--iko-white) !important;
+    color: var(--iko-black) !important;
+
+    font-family: var(--iko-font-body) !important;
     font-size: 11px !important;
-    font-weight: 600 !important;
+    font-weight: 800 !important;
+
     cursor: pointer !important;
     white-space: nowrap !important;
+
+    box-shadow: 2px 2px 0 var(--iko-black) !important;
+
+    transition:
+        transform var(--iko-fast),
+        box-shadow var(--iko-fast),
+        background-color var(--iko-fast) !important;
 }
 
-.iko-att-btn:hover:not(:disabled) { background: rgba(255,255,255,.11) !important; color: #fff !important; }
-.iko-att-btn:disabled { opacity: .45 !important; cursor: wait !important; }
+.iko-att-btn:hover:not(:disabled) {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
+
+.iko-att-btn:active:not(:disabled) {
+    transform: translate(3px, 3px) !important;
+    box-shadow: 0 0 0 var(--iko-black) !important;
+}
+
+.iko-att-btn:disabled {
+    opacity: 0.5 !important;
+    cursor: wait !important;
+    transform: none !important;
+}
 
 .iko-att-btn.primary {
-    background: #fff !important;
-    border-color: transparent !important;
-    color: #141416 !important;
+    background: var(--iko-yellow) !important;
+    color: var(--iko-black) !important;
 }
 
-.iko-att-btn.primary:hover:not(:disabled) { background: rgba(255,255,255,.85) !important; color: #000 !important; }
+.iko-att-btn.primary:hover:not(:disabled) {
+    background: #ffdf3d !important;
+}
 
 .iko-att-foot {
     margin-top: 10px !important;
+
     padding-top: 8px !important;
-    border-top: 1px solid rgba(255,255,255,.07) !important;
+
+    border-top: var(--iko-border-thin) !important;
+
     font-size: 10.5px !important;
     line-height: 1.55 !important;
-    color: rgba(255,255,255,.4) !important;
+
+    color: #444444 !important;
+}
+
+
+/* ================================
+   SCROLLBARS (scoped to IKO)
+================================ */
+
+.iko-migration-body::-webkit-scrollbar,
+.iko-pick-list::-webkit-scrollbar,
+.iko-logs-pre::-webkit-scrollbar,
+.iko-att-body::-webkit-scrollbar,
+#iko-optimizer-panel .iko-optimizer-panel::-webkit-scrollbar {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+.iko-migration-body::-webkit-scrollbar-track,
+.iko-pick-list::-webkit-scrollbar-track,
+.iko-logs-pre::-webkit-scrollbar-track,
+.iko-att-body::-webkit-scrollbar-track,
+#iko-optimizer-panel .iko-optimizer-panel::-webkit-scrollbar-track {
+    background: var(--iko-white) !important;
+}
+
+.iko-migration-body::-webkit-scrollbar-thumb,
+.iko-pick-list::-webkit-scrollbar-thumb,
+.iko-logs-pre::-webkit-scrollbar-thumb,
+.iko-att-body::-webkit-scrollbar-thumb,
+#iko-optimizer-panel .iko-optimizer-panel::-webkit-scrollbar-thumb {
+    border: var(--iko-border-thin) !important;
+    background: var(--iko-pink) !important;
+}
+
+
+/* ================================
+   REDUCED MOTION (scoped — never touches the host page)
+================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    #iko-migration-panel,
+    #iko-migration-panel *,
+    #iko-migration-panel *::before,
+    #iko-migration-panel *::after,
+    #iko-optimizer-panel,
+    #iko-optimizer-panel *,
+    #iko-optimizer-panel *::before,
+    #iko-optimizer-panel *::after,
+    #iko-attachments-panel,
+    #iko-attachments-panel *,
+    #iko-attachments-panel *::before,
+    #iko-attachments-panel *::after,
+    #iko-pending-migration,
+    #iko-pending-migration * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
