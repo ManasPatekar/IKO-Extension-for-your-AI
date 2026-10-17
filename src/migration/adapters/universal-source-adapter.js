@@ -1,5 +1,6 @@
 const { SourceAdapter } = require("./adapter-interface.js");
 const { matchPlatform } = require("../platforms.js");
+const { loadAllHistory } = require("../core/full-history.js");
 
 function log(level, message, data) {
     try {
@@ -22,6 +23,17 @@ class UniversalSourceAdapter extends SourceAdapter {
         const pid = this.platformId !== "universal" ? this.platformId : (plat?.id || "unknown");
         log("info", "extract start", { url: location.href, platform: pid });
         await new Promise(r => setTimeout(r, 400));
+
+        // Lazy history: bring the whole thread into the DOM before reading it.
+        try {
+            const fh = await loadAllHistory();
+            log("info", "full-history walk", {
+                ok: fh.ok, skipped: !!fh.skipped, reason: fh.reason,
+                steps: fh.steps, count: fh.count
+            });
+        } catch (e) {
+            log("warn", "full-history walk failed", { error: String(e?.message || e).slice(0, 200) });
+        }
 
         const selectors = [...(plat?.selectors || []),
             "[data-message-author-role]", '[data-testid^="conversation-turn-"]',

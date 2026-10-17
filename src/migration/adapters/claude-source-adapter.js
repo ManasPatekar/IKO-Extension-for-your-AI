@@ -1,4 +1,5 @@
 const { SourceAdapter, AdapterError } = require("./adapter-interface.js");
+const { loadAllHistory } = require("../core/full-history.js");
 
 function log(level, message, data) {
     try {
@@ -225,6 +226,27 @@ function collectStructuredClaude(doc) {
     return out;
 }
 
+// Structured DOM nodes -> normalized messages (alternating roles when the
+// markup carries no role signal).
+function domMessagesFromClaude(found) {
+    const out = [];
+    let autoRole = "user"; // Claude chats start with the user
+    for (const f of found) {
+        const role = f.role || autoRole;
+        autoRole = role === "user" ? "assistant" : "user";
+        out.push({
+            id: `claude-dom-${out.length + 1}`,
+            role,
+            sourceRole: f.role ? `dom:${f.role}` : "dom-alternating",
+            content: f.text.slice(0, 20000),
+            parentId: out.length ? out[out.length - 1].id : null,
+            timestamp: null, model: null,
+            raw: { text: f.text.slice(0, 20000), strategy: "structured-dom" }
+        });
+    }
+    return out;
+}
+
 // Leaf-only fallback: keep innermost text containers, drop shell wrappers.
 // (The old version kept the outermost node — the whole <main> as 1 block.)
 function leafBlocksClaude(doc) {
@@ -325,23 +347,30 @@ class ClaudeSourceAdapter extends SourceAdapter {
         log("info", `bridge parsed: ${messages.length} messages`, {});
 
         const doc = globalThis.document;
-        // Structured DOM pass (Claude's current markup)
-        if (!messages.length && doc) {
+
+        // Lazy history: Claude mounts only the last visible turns on load and
+        // back-fills older ones while scrolling toward the top.
+        if (doc) {
+            try {
+                const fh = await loadAllHistory();
+                log("info", "full-history walk", {
+                    ok: fh.ok, skipped: !!fh.skipped, reason: fh.reason,
+                    steps: fh.steps, count: fh.count
+                });
+            } catch (e) {
+                log("warn", "full-history walk failed", { error: String(e?.message || e).slice(0, 200) });
+            }
+        }
+
+        // Structured DOM pass (Claude's current markup) — used when the bridge
+        // has nothing, or when the DOM captured more turns than the bridge did.
+        if (doc) {
             const found = collectStructuredClaude(doc);
             log("info", `Claude structured DOM: ${found.length} nodes`, {});
-            let autoRole = "user"; // Claude chats start with the user
-            for (const f of found) {
-                const role = f.role || autoRole;
-                autoRole = role === "user" ? "assistant" : "user";
-                messages.push({
-                    id: `claude-dom-${messages.length + 1}`,
-                    role,
-                    sourceRole: f.role ? `dom:${f.role}` : "dom-alternating",
-                    content: f.text.slice(0, 20000),
-                    parentId: messages.length ? messages[messages.length - 1].id : null,
-                    timestamp: null, model: null,
-                    raw: { text: f.text.slice(0, 20000), strategy: "structured-dom" }
-                });
+            const domMessages = domMessagesFromClaude(found);
+            if (domMessages.length > messages.length) {
+                if (messages.length) log("info", `DOM has more turns than bridge (${domMessages.length} > ${messages.length}) — using DOM`, {});
+                messages = domMessages;
             }
         }
 
@@ -409,7 +438,7 @@ class ClaudeSourceAdapter extends SourceAdapter {
             model: conversation?.model || null,
             createdAt: conversation?.created_at || null,
             updatedAt: conversation?.updated_at || null,
-            extractorVersion: "iko-claude-3-shapes+dom",
+            extractorVersion: "iko-claude-4-fullhistory",
             messages,
             activeLeafId: messages[messages.length - 1].id,
             instructions: []
@@ -419,4 +448,4 @@ class ClaudeSourceAdapter extends SourceAdapter {
     extractText(message) { return extractTextDeep(message); }
 }
 
-module.exports = { ClaudeSourceAdapter, detectRole, extractTextDeep, parseBridgeMessages };
+module.exports = { ClaudeSourceAdapter, detectRole, extractTextDeep, parseBridgeMessages, domMessagesFromClaude };

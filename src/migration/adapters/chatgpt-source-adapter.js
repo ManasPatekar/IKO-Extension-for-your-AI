@@ -1,4 +1,5 @@
 const { SourceAdapter, AdapterError } = require("./adapter-interface.js");
+const { loadAllHistory } = require("../core/full-history.js");
 
 function log(level, message, data) {
     try {
@@ -247,24 +248,26 @@ class ChatGPTSourceAdapter extends SourceAdapter {
     async extractSession() {
         log("info", "extract start", { url: location.href, title: document.title });
 
-        // 1) Prefer API (bridge / direct fetch) — immune to app-shell DOM changes
+        // 1) Prefer API (bridge / direct fetch) — immune to app-shell DOM changes.
+        //    Some endpoints paginate, so the DOM pass below may still be fuller.
+        let apiMessages = null;
         try {
-            const apiMessages = await tryBridge();
-            if (apiMessages?.length) {
-                const convId = location.pathname.split("/").filter(Boolean).pop() || `chatgpt-${Date.now()}`;
-                return {
-                    platform: "chatgpt",
-                    conversationId: convId,
-                    title: document.title || "ChatGPT Conversation",
-                    model: null, createdAt: null, updatedAt: null,
-                    extractorVersion: "iko-chatgpt-api-1",
-                    messages: apiMessages.map((m, i) => ({ ...m, parentId: i ? apiMessages[i - 1].id : null })),
-                    activeLeafId: apiMessages[apiMessages.length - 1].id,
-                    instructions: []
-                };
-            }
+            apiMessages = await tryBridge();
+            if (apiMessages?.length) log("info", `API/bridge yielded ${apiMessages.length} messages`, {});
         } catch (e) {
             log("warn", "bridge path failed, falling back to DOM", { error: String(e?.message || e).slice(0, 300) });
+        }
+
+        // 2) Lazy history: walk the thread to the top so ALL turns render in the
+        //    DOM (ChatGPT mounts only the last visible messages on load).
+        try {
+            const fh = await loadAllHistory();
+            log("info", "full-history walk", {
+                ok: fh.ok, skipped: !!fh.skipped, reason: fh.reason,
+                steps: fh.steps, count: fh.count
+            });
+        } catch (e) {
+            log("warn", "full-history walk failed", { error: String(e?.message || e).slice(0, 200) });
         }
 
         await new Promise(r => setTimeout(r, 400));
@@ -355,12 +358,33 @@ class ChatGPTSourceAdapter extends SourceAdapter {
             try { window.IKO?.logger?.warn?.("ChatGPT-extract", "Used fallback alternating roles — verify user/assistant order in preview", {}); } catch { /* ignore */ }
         }
 
+        // API data carries real ids/roles but can be paginated/partial; the DOM
+        // after the full-history walk holds everything that rendered. Use
+        // whichever captured more messages, preferring the API on a tie.
+        const preferApi = !!apiMessages?.length && apiMessages.length >= messages.length;
+        if (preferApi) {
+            log("info", `using API data (${apiMessages.length} messages)`, {});
+            return {
+                platform: "chatgpt",
+                conversationId: location.pathname.split("/").filter(Boolean).pop() || `chatgpt-${Date.now()}`,
+                title: document.title || "ChatGPT Conversation",
+                model: null, createdAt: null, updatedAt: null,
+                extractorVersion: "iko-chatgpt-api-1",
+                messages: apiMessages.map((m, i) => ({ ...m, parentId: i ? apiMessages[i - 1].id : null })),
+                activeLeafId: apiMessages[apiMessages.length - 1].id,
+                instructions: []
+            };
+        }
+        if (apiMessages?.length) {
+            log("info", `DOM has more messages than API (${messages.length} > ${apiMessages.length}) — using DOM`, {});
+        }
+
         return {
             platform: "chatgpt",
             conversationId: location.pathname.split("/").filter(Boolean).pop() || `chatgpt-${Date.now()}`,
             title: document.title || "ChatGPT Conversation",
             model: null, createdAt: null, updatedAt: null,
-            extractorVersion: "iko-chatgpt-dom-3-fallback",
+            extractorVersion: "iko-chatgpt-dom-4-fullhistory",
             messages,
             activeLeafId: messages[messages.length - 1].id,
             instructions: []

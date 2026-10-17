@@ -348,6 +348,13 @@
             showStatus(status, "Preparing migration…", "loading");
             review.hidden = true;
 
+            // Progress from source adapters while they load the full history.
+            const onProgress = event => {
+                const message = event?.detail?.message;
+                if (message) showStatus(status, message, "loading");
+            };
+            try { window.addEventListener("iko-migration-progress", onProgress); } catch { /* ignore */ }
+
             try {
                 const result = await options.onPrepareMigration?.(options.destinationId, {
                     sourceId: options.sourceId,
@@ -364,6 +371,8 @@
                 showError(status, error);
                 prepare.disabled = false;
                 prepare.textContent = "Prepare Migration";
+            } finally {
+                try { window.removeEventListener("iko-migration-progress", onProgress); } catch { /* ignore */ }
             }
         });
 

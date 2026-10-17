@@ -192,16 +192,28 @@ const IKOComposer = require("../composer-io.js");
         return lines.join("\n");
     }
 
-    function sessionToChunks(session, excluded, maxChars = 7500) {
+    // Multi-part format for very large sessions: the header appears once in
+    // part 1 and the closing line once in the last part, so sequentially
+    // inserted parts join into ONE coherent message in the destination box.
+    function sessionToChunks(session, excluded, maxChars = 12000) {
         const full = sessionToPrompt(session, excluded);
         if (full.length <= maxChars) return [full];
-        // greedy split by message turns so we never cut code mid-block
         const source = session?.source || {};
-        const header = `IKO SESSION MIGRATION (Source: ${source.platform || "AI"} — ${source.title || "Untitled"})`;
+        const header = [
+            "IKO SESSION MIGRATION",
+            `Source: ${source.platform || "AI"}`,
+            `Conversation: ${source.title || "Untitled Session"}`,
+            "",
+            "The following is the preserved conversation context. Continue from it without losing the previous decisions, requirements, or code context.",
+            "",
+            "--- CONVERSATION ---"
+        ].join("\n");
         const turns = [];
         for (const m of (session?.messages || []).filter(x => !(excluded && excluded.has?.(x.id)))) {
-            const c = Array.isArray(m.content) ? m.content.map(b => b?.text || b?.code || "").join("\n") : String(m.content || "");
-            if (c.trim()) turns.push(`${String(m.role || "user").toUpperCase()}:\n${c}`);
+            const content = Array.isArray(m.content)
+                ? m.content.map(b => b?.text || b?.code || (b?.input ? JSON.stringify(b.input) : "") || (b?.output ? JSON.stringify(b.output) : "") || "").join("\n")
+                : String(m.content || "");
+            if (content.trim()) turns.push(`${String(m.role || "user").toUpperCase()}:\n${content}`);
         }
         const chunks = [];
         let cur = [];
@@ -211,7 +223,14 @@ const IKOComposer = require("../composer-io.js");
             cur.push(t); len += t.length + 2;
         }
         if (cur.length) chunks.push(cur);
-        return chunks.map((parts, i) => [header, `Part ${i + 1}/${chunks.length} — paste all parts in order, then continue.`, "", "--- CONVERSATION ---", ...parts, "--- END ---"].join("\n"));
+        const total = chunks.length;
+        return chunks.map((parts, i) => {
+            const out = [];
+            if (i === 0) out.push(header);
+            out.push(...parts);
+            if (i === total - 1) out.push("", "--- END CONVERSATION ---", "", "Continue from the conversation above.");
+            return out.join("\n");
+        });
     }
 
     // ---- Session library (local, max 20) ----
@@ -279,38 +298,61 @@ const IKOComposer = require("../composer-io.js");
         bar.innerHTML = `
             <div>
                 <strong>IKO migration ready</strong>
-                <span>${packageData.session.source?.title || "Migrated session"}</span>
+                <span data-role="progress">${packageData.session.source?.title || "Migrated session"}</span>
             </div>
             <button type="button">Insert session context</button>
             <button type="button" aria-label="Dismiss">×</button>
         `;
         document.body.appendChild(bar);
 
-        bar.querySelector("button")?.addEventListener("click", () => {
+        bar.querySelector("button")?.addEventListener("click", async () => {
+            const btn = bar.querySelector("button");
+            const progress = bar.querySelector("span[data-role='progress']");
             const composer = findComposer();
             if (!composer) {
                 alert("IKO could not find the destination composer. Click the chat box and try again.");
                 return;
             }
-            // Chunked insert: big sessions exceed composer limits — paste part by part
+            // Chunked insert: big sessions exceed composer limits. All parts are
+            // APPENDED in one click so the whole conversation ends up in the
+            // composer as a single message (state kept for retry on failure).
             const chunks = sessionToChunks(packageData.session, null);
             let idx = Number(bar.dataset.chunk || 0);
-            setComposerValue(composer, chunks[idx]);
-            try { window.IKO?.logger?.info?.("Migration", "inserted chunk", { idx: idx + 1, of: chunks.length }); } catch { /* ignore */ }
-            if (idx + 1 < chunks.length) {
-                bar.dataset.chunk = String(idx + 1);
-                bar.querySelector("button").textContent = `Insert part ${idx + 2}/${chunks.length}`;
-            } else {
-                try {
-                    chrome.runtime.sendMessage(
-                        { type: "IKO_CLEAR_MIGRATION" },
-                        () => { void chrome.runtime?.lastError; }
-                    );
-                } catch (error) {
-                    console.debug("[IKO Migration] Could not clear migration state:", error?.message || error);
-                }
-                bar.remove();
+            let acc = bar.dataset.acc || "";
+
+            btn.disabled = true;
+            let failed = false;
+            while (idx < chunks.length) {
+                const next = acc ? `${acc}\n\n${chunks[idx]}` : chunks[idx];
+                if (progress) progress.textContent = `Inserting part ${idx + 1}/${chunks.length}…`;
+                const written = setComposerValue(composer, next);
+                try { window.IKO?.logger?.info?.("Migration", "inserted chunk", { idx: idx + 1, of: chunks.length, written, chars: next.length }); } catch { /* ignore */ }
+                if (!written) { failed = true; break; }
+                acc = next;
+                idx += 1;
+                bar.dataset.chunk = String(idx);
+                bar.dataset.acc = acc;
+                if (idx < chunks.length) await new Promise(r => setTimeout(r, 250));
             }
+            btn.disabled = false;
+
+            if (failed) {
+                btn.textContent = `Retry from part ${idx + 1}/${chunks.length}`;
+                if (progress) progress.textContent = `Inserted ${idx}/${chunks.length} parts — click retry to continue.`;
+                alert("IKO could not write into the destination chat box. Click the chat box and try again.");
+                return;
+            }
+
+            if (progress) progress.textContent = `All ${chunks.length} part${chunks.length === 1 ? "" : "s"} inserted — review and send.`;
+            try {
+                chrome.runtime.sendMessage(
+                    { type: "IKO_CLEAR_MIGRATION" },
+                    () => { void chrome.runtime?.lastError; }
+                );
+            } catch (error) {
+                console.debug("[IKO Migration] Could not clear migration state:", error?.message || error);
+            }
+            bar.remove();
         });
 
         bar.querySelectorAll("button")[1]?.addEventListener("click", () => {
