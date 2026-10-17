@@ -256,7 +256,7 @@
         let activeRetrieval = null;
 
         // ---- QASC: optional question → minimal relevant context ----
-        const qWrap = el("details", "iko-migration-logs");
+        const qWrap = el("details", "iko-migration-logs iko-qasc");
         qWrap.appendChild(el("summary", "iko-logs-summary", "🎯 Minimal context for a question (optional)"));
         const qInput = document.createElement("input");
         qInput.type = "text";
@@ -295,17 +295,22 @@
         body.appendChild(qWrap);
 
         // ---- Session library (persisted packages) ----
-        const libWrap = el("details", "iko-migration-logs");
+        const libWrap = el("details", "iko-migration-logs iko-library");
         libWrap.appendChild(el("summary", "iko-logs-summary", "★ Saved sessions"));
         const libList = el("div", "iko-pick-list");
-        libList.textContent = "Loading…";
         libWrap.appendChild(libList);
+        const setLibraryMessage = (message) => {
+            libList.className = "iko-pick-list iko-library-empty";
+            libList.textContent = message;
+        };
+        setLibraryMessage("Loading…");
         body.appendChild(libWrap);
         async function refreshLibrary() {
             try {
                 const items = await options.onListLibrary?.() || [];
+                libList.className = "iko-pick-list";
                 libList.innerHTML = "";
-                if (!items.length) { libList.textContent = "(none saved yet — Prepare then ★ Save)"; return; }
+                if (!items.length) { setLibraryMessage("(none saved yet — Prepare then ★ Save)"); return; }
                 for (const it of items.slice(0, 20)) {
                     const row = el("div", "iko-review-row");
                     row.appendChild(el("span", "iko-review-label", `${it.title || it.id} · ${it.messages || "?"} msgs`));
@@ -332,7 +337,7 @@
                     row.appendChild(btns);
                     libList.appendChild(row);
                 }
-            } catch { libList.textContent = "(library unavailable)"; }
+            } catch { setLibraryMessage("(library unavailable)"); }
         }
         setTimeout(refreshLibrary, 600);
 
