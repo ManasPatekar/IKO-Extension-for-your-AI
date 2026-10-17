@@ -65,6 +65,14 @@ function fallbackBlocks() {
 }
 
 function extractMessages() {
+    // Gemini homepage / new chat: no active conversation yet — don't count
+    // page chrome or welcome text as context.
+    const h = location.hostname.toLowerCase();
+    const p = location.pathname;
+    if (h.includes("gemini") && (p === "/app" || p === "/app/")) {
+        return [];
+    }
+
     // Keep in sync with chatgpt-source-adapter: ChatGPT renamed DOM in 2025-26.
     const selectors = [
         "[data-message-author-role]",

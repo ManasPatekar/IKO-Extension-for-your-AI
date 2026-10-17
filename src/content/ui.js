@@ -773,8 +773,10 @@ window.IKO.ui = {
         usageElement.textContent =
           "—";
       } else {
+        // Round to 0% when tokens exist but usage is below 1% — show <1%
+        // instead of a misleading 0%.
         usageElement.textContent =
-          `${percentage}%`;
+          percentage === 0 && tokens > 0 ? "<1%" : `${percentage}%`;
       }
     }
 
