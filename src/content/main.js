@@ -76,25 +76,47 @@ function readThread(platformId) {
 // site itself fetched, whose mapping holds the whole conversation — the number
 // that matters when deciding to migrate. It is only as fresh as the last fetch,
 // so it is combined with the live DOM reading, never replacing it.
-let bridgeCache = { payload: null, messages: [], tokens: -1 };
+let bridgeCache = { payload: null, messages: [], tokens: -1, initialized: false };
 // Rolling back the count when a site unmounts old turns would state the
 // opposite of the truth ("less context in use"). Keep the largest count seen
 // for this conversation; starting or switching chats resets it.
 let highWater = { key: "", tokens: 0 };
+// The bridge holds whatever conversation the page last fetched — when the user
+// starts a new chat its payload can still belong to the previous one, so track
+// the id and reset everything when the chat changes.
+let lastConvoId = "";
 
+// A same-origin fetch of the conversation endpoint never downgrades a payload
+// that already holds more messages (bridge payload included).
 function conversationKey() {
     return `${location.hostname}${location.pathname}`;
 }
 
 function bridgeMessages() {
     try {
-        const payload = window.IKO?.chatgptBridge?.latestConversation;
+        const bridge = window.IKO?.chatgptBridge;
+        const id = conversationId();
+        // Prefer the last payload that really parsed: the sidebar's chat-list
+        // shares the conversation URL prefix and overwrites latestConversation.
+        const payload = bridge?.latestValidConversation || bridge?.latestConversation;
         if (!payload) return [];
+        // Never count another conversation's payload: the bridge can hold the
+        // previous chat (or its sidebar list) while this tab shows a new one.
+        const payloadId = String(payload?.conversation_id || "").slice(0, 64);
+        if (payloadId && payloadId !== id) return [];
+        if (bridgeCache.initialized && bridgeCache.convoId !== id) {
+            bridgeCache = { payload: null, convoId: id, messages: [], tokens: -1, initialized: true };
+            return [];
+        }
+        if (!bridgeCache.initialized) {
+            bridgeCache.initialized = true;
+            bridgeCache.convoId = id;
+        }
         if (payload !== bridgeCache.payload) {
             const messages = typeof chatThread.extractConversationMessages === "function"
                 ? chatThread.extractConversationMessages(payload)
                 : null;
-            bridgeCache = { payload, messages: Array.isArray(messages) ? messages : [], tokens: -1 };
+            bridgeCache = { payload, convoId: id, messages: Array.isArray(messages) ? messages : [], tokens: -1, initialized: true };
         }
         return bridgeCache.messages;
     } catch { return []; }
@@ -110,6 +132,108 @@ function bridgeTokens() {
         );
     }
     return bridgeCache.tokens;
+}
+
+// --- whole conversation on demand (ChatGPT) ----------------------------------
+// The bridge only exists when the page itself fetched the conversation, and its
+// payload can be overwritten by the sidebar's chat-list request. So when no
+// conversation is in hand, ask the same same-origin endpoint the migration
+// adapter uses — the cookies the page already has are enough. Once per
+// conversation (retried after a minute so a hiccup is not permanent).
+let remoteAttempt = { id: "", at: 0, pending: false };
+
+function conversationId() {
+    const last = location.pathname.split("/").filter(Boolean).pop() || "";
+    return /^[0-9a-zA-Z-]{10,}$/.test(last) ? last : "";
+}
+
+function fetchConversation() {
+    if (remoteAttempt.pending) return;
+    const id = conversationId();
+    if (!id) return;
+    if (id === remoteAttempt.id && Date.now() - remoteAttempt.at < 60000) return;
+    remoteAttempt = { id, at: Date.now(), pending: true };
+    const log = (level, message, data) => {
+        try { window.IKO.logger?.[level]?.("ChatGPT-HUD", message, data); } catch { /* ignore */ }
+        const method = level === "warn" ? "warn" : "log";
+        console[method](`[IKO:ChatGPT-HUD] ${message}`, data || "");
+    };
+    (async () => {
+        // Whole-thread first (some builds paginate the plain endpoint), then the
+        // plain live endpoint, then the classic singular one.
+        for (const path of [
+            `/backend-api/conversations/${id}?num_turns=1000`,
+            `/backend-api/conversations/${id}`,
+            `/backend-api/conversation/${id}`
+        ]) {
+            try {
+                const response = await fetch(path, { credentials: "include" });
+                if (!response.ok) { log("warn", `conversation endpoint ${path} → ${response.status}`, {}); continue; }
+                const data = await response.json();
+                const messages = chatThread.extractConversationMessages(data);
+                if (messages?.length) {
+                    // Never downgrade: keep whichever payload holds more messages.
+                    try {
+                        const bridge = window.IKO.chatgptBridge;
+                        if (bridge && messages.length > (bridge.latestValidMessages || 0)) {
+                            bridge.latestValidConversation = data;
+                            bridge.latestValidMessages = messages.length;
+                        }
+                    } catch { /* ignore */ }
+                    log("info", `whole conversation read (${path})`, { messages: messages.length });
+                    return;
+                }
+                log("warn", `conversation payload unparsable (${path})`, { keys: Object.keys(data || {}).slice(0, 8).join(",") });
+            } catch (error) {
+                log("warn", `conversation fetch failed (${path})`, { error: String(error?.message || error).slice(0, 160) });
+            }
+        }
+    })().finally(() => { remoteAttempt.pending = false; });
+}
+
+// A page the reader cannot fully read must be diagnosable from "Copy logs":
+// selector counts, the container that was chosen and the bridge state, once per
+// conversation instead of every poll.
+let lastDiagnostic = "";
+
+function describeBridge() {
+    try {
+        const bridge = window.IKO?.chatgptBridge;
+        if (!bridge) return "client-missing";
+        const parts = [bridge.ready ? "ready" : "silent"];
+        if (!bridge.latestConversation) parts.push("no-payload");
+        else parts.push(`payload(${Object.keys(bridge.latestConversation).slice(0, 5).join(",")})`);
+        const valid = bridge.latestValidConversation ? chatThread.extractConversationMessages(bridge.latestValidConversation) : null;
+        parts.push(valid?.length ? `valid(${valid.length} msgs)` : "no-valid");
+        return parts.join(" ");
+    } catch { return "client-error"; }
+}
+
+function logWeakRead(info, source, reason) {
+    const key = `${info.name}|${source}|${reason}|${location.pathname}`;
+    if (key === lastDiagnostic) return;
+    lastDiagnostic = key;
+    const bridge = describeBridge();
+    const line = `[IKO:ChatGPT-HUD] weak read — source=${source} reason=${reason || "-"} bridge=${bridge}`;
+    let detail = {};
+    try { detail = typeof chatThread.debugReading === "function" ? chatThread.debugReading(info.id) : {}; } catch { /* ignore */ }
+    console.log(line, detail);
+    try {
+        window.IKO.logger?.warn?.("ChatGPT-HUD", line, Object.assign({
+            host: location.hostname,
+            url: location.href.slice(0, 160),
+            bridge,
+            selectors: JSON.stringify(detail.selectors || {}),
+            samples: (detail.samples || []).join(" | ")
+        }, {
+            matched: detail.matched,
+            innermost: detail.innermost,
+            container: detail.container,
+            containerChars: detail.containerChars,
+            containerBlocks: detail.containerBlocks,
+            descended: detail.descended
+        }));
+    } catch { /* ignore */ }
 }
 
 // Re-tokenising an unchanged thread every 2s burns CPU for nothing. The
@@ -136,6 +260,15 @@ function update() {
     const key = conversationKey();
     if (highWater.key !== key) highWater = { key, tokens: 0 };
 
+    // ChatGPT keeps its own copy of the last opened chat in the bridge; a new
+    // chat must not inherit its count (invalidated inside bridgeMessages), and
+    // any in-flight endpoint attempt must be restarted for this conversation.
+    const id = conversationId();
+    if (id && id !== lastConvoId) {
+        lastConvoId = id;
+        remoteAttempt = { id: "", at: 0, pending: false };
+    }
+
     let messages = [];
     let source = "none";
     let reason = "";
@@ -152,12 +285,13 @@ function update() {
     // The bridge payload is the whole conversation on sites that publish one,
     // even when the DOM currently shows none of it.
     const full = bridgeMessages();
+    // ChatGPT without a conversation in hand: ask the page's own endpoint.
+    if (!full.length && info.id === "chatgpt") fetchConversation();
 
     if (!messages.length && !full.length) {
         lastSignature = "";
         // Make a site we cannot read diagnosable from the console / View logs.
-        console.log(`[IKO:ChatGPT-HUD] no messages in view — ${reason || "unknown"}`);
-        try { window.IKO.logger?.info?.("ChatGPT-HUD", `no messages in view — ${reason || "unknown"}`, { host: location.hostname }); } catch { /* ignore */ }
+        logWeakRead(info, source, reason);
         window.IKO.latestData = {
             platform: info.name,
             tokens: 0,
@@ -196,6 +330,9 @@ function update() {
             highWater.tokens = tokens;
             const whole = fullTokens > domTokens;
             const usedSource = whole ? "conversation" : source;
+            // Without the whole conversation, a fallback reading is worth a one-off
+            // diagnostic — that is the case where a real site can still be fixed.
+            if (!whole && source !== "selectors") logWeakRead(info, source, reason);
 
             const cost = tokens / 1000000 * info.price;
             const pct = Math.min(100, Math.round((tokens / info.budget) * 100));
@@ -213,7 +350,7 @@ function update() {
                 tokenizer: "o200k_base",
                 cost,
                 source: usedSource,
-                reason: whole ? `bridge(${full.length} msgs)` : reason,
+                reason: whole ? `whole-conversation(${full.length} msgs)` : reason,
                 status: `${health} · ~$${cost.toFixed(3)}`
             };
 

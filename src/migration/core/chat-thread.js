@@ -68,6 +68,8 @@ function readText(el, { skipChrome = false } = {}) {
     }
     let out = "";
     const walk = (node) => {
+        // Pierce shadow DOM at this level: message text can live in a shadow root.
+        if (node.shadowRoot) walk(node.shadowRoot);
         for (const child of node.childNodes || []) {
             if (child.nodeType === 3) {
                 out += String(child.nodeValue || "") + " ";
@@ -178,37 +180,52 @@ function fromSelectors(platformId) {
 //   - it stops as soon as a level already splits into message-sized blocks, so
 //     a chat whose last answer dominates the text does not get walked into a
 //     single paragraph and then rejected as "too small".
+//
+// The walk also remembers the best (deepest, most-text) container seen along
+// the way. If descent ends in a short element (short messages, UI chrome), we
+// backtrack to that best container instead of returning 0.
 function threadContainer() {
     let el = document.querySelector("main") || document.querySelector("[role='main']") || document.querySelector("body");
-    if (!el) return { el: null, descended: false };
+    if (!el) return { el: null, descended: false, chars: 0 };
     let descended = false;
+    let bestEl = el;
+    let bestChars = textLength(el);
     for (let step = 0; step < MAX_DESCENT; step++) {
-        if (looksLikeList(el)) break;
+        if (looksLikeList(el)) {
+            const chars = textLength(el);
+            if (chars >= BLOCK_MIN_CHARS) { bestEl = el; bestChars = chars; descended = true; }
+            return { el: bestEl, descended, chars: bestChars };
+        }
         const total = textLength(el);
         if (!total) break;
-        let best = null;
+        let bestChild = null;
         let bestLen = 0;
         let examined = 0;
         for (const child of el.children || []) {
             if (examined++ > MAX_CHILDREN) break;
             if (!child.tagName || NOISE_TAGS.has(child.tagName) || CHROME_TAGS.has(child.tagName)) continue;
             const len = textLength(child);
-            if (len > bestLen) {
-                bestLen = len;
-                best = child;
-            }
+            if (len > bestLen) { bestLen = len; bestChild = child; }
         }
-        if (!best || bestLen < total * DOMINANT_CHILD_RATIO) break;
-        el = best;
+        if (!bestChild || bestLen < total * DOMINANT_CHILD_RATIO) break;
+        if (total >= BLOCK_MIN_CHARS) { bestEl = el; bestChars = total; }
+        el = bestChild;
         descended = true;
     }
-    return { el, descended };
+    // If we ended up in a short element, backtrack to the best container seen.
+    return bestChars >= BLOCK_MIN_CHARS ? { el: bestEl, descended, chars: bestChars } : { el, descended: false, chars: textLength(el) };
 }
 
 // True when this element already splits into two message-sized blocks.
 function looksLikeList(el) {
     let count = 0;
-    for (const child of el.children || []) {
+    const elementChildren = (node) => {
+        const out = [];
+        for (const child of node.children || []) out.push(child);
+        if (node.shadowRoot) for (const child of node.shadowRoot.children || []) out.push(child);
+        return out;
+    };
+    for (const child of elementChildren(el)) {
         if (!child.tagName || NOISE_TAGS.has(child.tagName) || CHROME_TAGS.has(child.tagName)) continue;
         if (textLength(child) >= BLOCK_MIN_CHARS) {
             count++;
@@ -223,9 +240,15 @@ function looksLikeList(el) {
 // (a markup whitelist made this return 0 on renamed DOMs).
 function blockCount(el) {
     let count = 0;
+    const elementChildren = (node) => {
+        const out = [];
+        for (const child of node.children || []) out.push(child);
+        if (node.shadowRoot) for (const child of node.shadowRoot.children || []) out.push(child);
+        return out;
+    };
     const walk = (node, depth) => {
         if (count >= 2 || depth > 3) return;
-        for (const child of node.children || []) {
+        for (const child of elementChildren(node)) {
             if (!child.tagName || NOISE_TAGS.has(child.tagName) || CHROME_TAGS.has(child.tagName)) continue;
             if (textLength(child) >= BLOCK_MIN_CHARS) {
                 count++;
@@ -245,6 +268,7 @@ function textLength(el) {
     let length = 0;
     let nodes = 0;
     const walk = (node) => {
+        if (node.shadowRoot) walk(node.shadowRoot);
         for (const child of node.childNodes || []) {
             if (nodes++ > MAX_WALK_NODES) return;
             if (child.nodeType === 3) {
@@ -266,7 +290,11 @@ function fromThread(container) {
     const el = found?.el;
     if (!el) return { messages: [], reason: "no-container" };
 
-    const content = readText(el, { skipChrome: true });
+    // Read with chrome skipped first (sidebar etc. is not context). If that
+    // yields nothing — e.g. content-visibility hid innerText — try the raw DOM
+    // walk which includes everything except script/style noise.
+    let content = readText(el, { skipChrome: true });
+    if (!content) content = readText(el);
     if (content.length < BLOCK_MIN_CHARS) return { messages: [], reason: `thread-too-small(${content.length})` };
 
     // Reaching here without descending means <main> itself is the container:
@@ -306,7 +334,58 @@ function extractChatThread(platformId) {
 
     const estimate = fromThread(container);
     if (estimate.messages.length) return { messages: estimate.messages, source: "thread", reason: estimate.reason };
+
+    // Last resort: deep-scan the page for the largest text block that looks
+    // like a conversation container (covers sites whose DOM we know nothing
+    // about and whose <main> doesn't line up with the conversation).
+    const deep = deepScanContainer();
+    if (deep) {
+        const content = readText(deep.el, { skipChrome: true }) || readText(deep.el);
+        if (content.length >= BLOCK_MIN_CHARS) {
+            return { messages: [{ role: "user", content, fallback: true, thread: true }], source: "thread", reason: `deep-scan(${deep.reason})` };
+        }
+    }
+
     return { messages: [], source: "none", reason: estimate.reason || "no-container" };
+}
+
+// --- deep scan fallback -------------------------------------------------------
+// When nothing else works, scan the page for the element with the most text
+// that is not chrome (nav/aside/header/footer/script/style) and contains at
+// least two substantial blocks. This is slow, so it only runs when both the
+// selector path and the thread estimate have failed.
+function deepScanContainer() {
+    const root = document.body || document.documentElement;
+    if (!root) return null;
+    let best = null;
+    let bestScore = 0;
+    const elementChildren = (node) => {
+        const out = [];
+        for (const child of node.children || []) out.push(child);
+        if (node.shadowRoot) for (const child of node.shadowRoot.children || []) out.push(child);
+        return out;
+    };
+    const walk = (node, depth) => {
+        if (depth > 4) return;
+        for (const child of elementChildren(node)) {
+            if (!child.tagName || NOISE_TAGS.has(child.tagName) || CHROME_TAGS.has(child.tagName)) continue;
+            const len = textLength(child);
+            if (len >= 150) {
+                const blocks = blockCount(child);
+                const score = len + blocks * 100;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = { el: child, reason: `blocks=${blocks} chars=${len}` };
+                }
+                // Keep descending — a deeper, more specific container is better.
+                walk(child, depth + 1);
+            } else {
+                walk(child, depth + 1);
+            }
+        }
+    };
+    walk(root, 0);
+    return best;
 }
 
 // --- whole-conversation reader (bridge payloads) -----------------------------
@@ -391,4 +470,39 @@ function extractConversationMessages(data) {
     } catch { return null; }
 }
 
-module.exports = { extractChatThread, extractConversationMessages, selectorsFor, readText, textOf, matchPlatform };
+// --- diagnostics -------------------------------------------------------------
+// Compact, paste-ready fingerprint of what a page offers when the reader cannot
+// read it. Logged once per conversation (not every poll) and kept small enough
+// for "View logs → Copy logs".
+function describe(node) {
+    if (!node) return "none";
+    const id = node.id ? `#${String(node.id).slice(0, 24)}` : "";
+    const cls = String(node.getAttribute?.("class") || "").split(/\s+/).filter(Boolean).slice(0, 3).join(".");
+    const text = String(node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    return `<${String(node.tagName || "?").toLowerCase()}${id}${cls ? `.${cls}` : ""}> "${text}"`;
+}
+
+function debugReading(platformId) {
+    const selectors = {};
+    const matched = [];
+    for (const selector of selectorsFor(platformId)) {
+        let nodes = null;
+        try { nodes = Array.from(document.querySelectorAll(selector)); } catch { nodes = null; }
+        selectors[selector] = nodes === null ? "invalid" : nodes.length;
+        if (nodes) for (const node of nodes) matched.push(node);
+    }
+    const filtered = innermost(Array.from(new Set(matched)));
+    const found = threadContainer();
+    return {
+        selectors,
+        matched: matched.length,
+        innermost: filtered.length,
+        samples: filtered.slice(0, 3).map(describe),
+        container: describe(found.el),
+        containerChars: textLength(found.el),
+        containerBlocks: blockCount(found.el),
+        descended: found.descended
+    };
+}
+
+module.exports = { extractChatThread, extractConversationMessages, debugReading, selectorsFor, readText, textLength, textOf, matchPlatform };

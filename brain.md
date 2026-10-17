@@ -90,16 +90,19 @@ src/migration/platforms.js           SINGLE SOURCE OF TRUTH: id,name,hosts,newUr
 src/migration/core/chat-thread.js     Shared thread reader for the Context HUD:
                                      platform selectors (from platforms.js) →
                                      innermost-match pruning → whole-thread
-                                     estimate, plus `extractConversationMessages`
-                                     for bridge/API payloads (whole chat, not just
-                                     what the DOM mounts). Exports readText/matchPlatform.
-src/migration/tests/chat-thread.test.js  18 tests: double-count, per-platform
+                                     estimate, `extractConversationMessages`
+                                     for bridge/API payloads (whole chat, not
+                                     just what the DOM mounts) and `debugReading`
+                                     (paste-ready fingerprint for Copy logs).
+                                     Exports readText/matchPlatform.
+src/migration/tests/chat-thread.test.js  19 tests: double-count, per-platform
                                      selectors, dedupe, thread estimate, partial
                                      markup, welcome screen, chrome skip, hidden
                                      innerText, budget contract per host, the
                                      0-token traps (script blob, dominant last
                                      turn, single-paragraph thread, empty markdown
-                                     wrapper), bridge conversation parsing.
+                                     wrapper), bridge conversation parsing,
+                                     debugReading fingerprint.
 src/migration/core/schema.js         Session shape v1.0.0, roles, content types, validator.
 src/migration/core/normalizer.js     Raw → canonical, active-branch resolve, clone.
 src/migration/core/integrity.js      Canonical JSON → SHA-256 attach/verify.
@@ -178,20 +181,36 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
   `matchPlatform(location.hostname)` (platforms.js is the only copy; the old
   inline `BUDGETS/PRICES` tables are gone).
   TWO SOURCES, ONE NUMBER: the DOM reading (what the page mounts) and, on
-  ChatGPT, the page bridge payload (`IKO.chatgptBridge.latestConversation` →
+  ChatGPT, the whole conversation from the page's own API. Two ways in, in
+  order: (1) the page bridge payload — `IKO.chatgptBridge.latestValidConversation`
+  first, because ChatGPT's SIDEBAR CHAT-LIST shares the
+  `/backend-api/conversations` URL prefix and overwrites `latestConversation`
+  with a list payload (the client keeps the last payload that really parses,
+  largest wins, and records how many messages it held);
+  (2) if there is none, one same-origin GET of the page's own endpoint
+  (`/backend-api/conversations/<id>?num_turns=1000`, then the plain plural, then
+  the classic singular; cookies carry the session; retried at most once a
+  minute) — whichever answers is logged, and it never downgrades a payload that
+  held more messages. Both feed
   `extractConversationMessages()`: API `mapping` walked along
   `current_node → parent`, so it is the whole conversation in order without dead
-  branches). `tokens = max(domTokens, bridgeTokens, highWater)` — the bridge
+  branches. `tokens = max(domTokens, bridgeTokens, highWater)` — the bridge
   covers turns the DOM no longer mounts, and the per-conversation HIGH-WATER
   mark (`hostname+pathname` key, reset when a chat is opened or started) stops
   the count from rolling back when a site unmounts old turns while scrolling.
   `cost`, `pct`, health (`≥80% filling, ≥95% critical`), status
-  `"<health> · ~$x.xxx"` with `"Full conversation"` when the bridge supplied the
-  number and `"Thread estimate — no message markup"` when the fallback did. An
-  FNV-1a signature of (platform, source, message texts, bridge tokens) skips
+  `"<health> · ~$x.xxx"` with `"Full conversation"` when the whole chat supplied
+  the number and `"Thread estimate — no message markup"` when the fallback did.
+  An FNV-1a signature of (platform, source, message texts, bridge tokens) skips
   re-tokenising when the thread has not changed, so the HUD only moves when the
   conversation moves. `window.IKO.chatThread` exposes the reader for other
   modules and harnesses.
+  WEAK-READ DIAGNOSTIC: when the DOM reading is not the selector path, the HUD
+  logs ONCE per conversation (`console` + log panel, so "View logs → Copy logs"
+  is enough to fix a site): the bridge state (`ready/silent`,
+  `payload(keys)`, `valid(N msgs)`), every selector with its match count, the
+  chosen container (tag#id.class + 60 chars), its chars/blocks and whether the
+  walk descended. That is what a "we cannot read this site" report needs.
   LIMIT: on sites with no bridge payload (everything but ChatGPT) only what is
   in the DOM is counted — the high-water mark softens but cannot remove
   virtualised-history under-reporting.
@@ -690,13 +709,42 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
     `chatgpt-bridge` (60-message payload vs 14 mounted turns → "Full
     conversation", 3300 vs 3330 ground truth) and `chatgpt-shrink` (6 turns
     unmounted → count stays 1001). 18 node tests + 12 harness cases.
+47. Same report, second round: the HUD recovered from 0 but sat at 845 /
+    "Thread estimate — no message markup" on a real ChatGPT chat. Root cause
+    found by reading the bridge, not the page: `latestConversation` is
+    overwritten by EVERY matching payload, and ChatGPT's sidebar chat-list calls
+    `/backend-api/conversations?offset=…` — a chat LIST, not the conversation.
+    So the whole-chat source was silently replaced by junk and the HUD fell back
+    to the (correct but partial) DOM estimate. Fixes:
+    (a) the bridge CLIENT (content world) validates each payload with
+        `extractConversationMessages` and keeps the last one that parses in
+        `latestValidConversation` (migration's `latestConversation` contract is
+        untouched); the HUD prefers it;
+    (b) when neither payload exists the HUD asks the page's own endpoint once
+        (`/backend-api/conversations/<id>?num_turns=1000` → plain plural →
+        classic singular, `credentials: include`, 60 s retry, never downgrades a
+        bigger payload) — same route the migration adapter uses, so a ChatGPT
+        chat now counts WHOLE even when the bridge never saw it or the page
+        fetched before the injected script runs;
+    (c) `debugReading()` + a once-per-conversation "weak read" log (selectors +
+        counts, container tag#id.class, chars/blocks, bridge state) so the next
+        unreadable site can be fixed from Copy logs instead of screenshots.
+    (d) a new or emptied chat never inherits the previous chat's bridge count:
+        the bridge client validates each payload with `extractConversationMessages`
+        and keeps only parses that belong to the current `/c/<id>` (its
+        `conversation_id` must match the pathname), and the HUD treats a
+        conversation-id mismatch as "no conversation yet". Stale sidebar /
+        chat-list payloads can no longer freeze a number onto a fresh chat.
+    Harness: new `chatgpt-directapi` case (stubbed endpoint, 60 msgs vs 14
+    mounted → "Full conversation", 3270 vs 3300 truth, exactly 1 fetch) — 13
+    cases / 54 assertions, 19 node tests.
 
 ## 5. Build / test / run
 
 ```bash
 npm install
 node build.js        # or npm run build → dist/{content,claude-content,claude-bridge,chatgpt-bridge,migration}.js + css
-npm test             # 68 tests: 11 migration + 18 chat-thread + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 composer + 7 fullhistory… (run it, don't trust the count)
+npm test             # 69 tests: 11 migration + 19 chat-thread + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 composer + 7 fullhistory… (run it, don't trust the count)
 npm run test:chatthread   # the Context HUD counting rules only
 ```
 
@@ -719,14 +767,15 @@ The HUD probe is the only way to test token counting without a logged-in site:
 symlink in `$HOME`), `iko-hud-repro.html` builds a synthetic conversation for a
 chosen DOM shape plus noise chrome and loads the REAL `dist/content.js`, and the
 probe compares the HUD's number against `countTokens()` of the same text in
-Node. Cases (12, 48 assertions): `chatgpt`, `gemini`, `perplexity`, `deepseek`,
+Node. Cases (13, 54 assertions): `chatgpt`, `gemini`, `perplexity`, `deepseek`,
 `generic` (article markup), `partial` (renamed markup → thread estimate),
 `chatgpt-grow` (must increase when 4 more turns arrive), `dominant` (the last
 answer holds ~86% of the text), `single` (one single-paragraph message),
 `chatgpt-bridge` (whole-conversation payload exceeds the mounted DOM →
-"Full conversation"), `chatgpt-shrink` (6 turns unmounted → count must not roll
-back), `partial-nomain-script` (no `<main>` + 40 KB inline JSON blob — the
-shape that read 0 in the wild).
+"Full conversation"), `chatgpt-directapi` (no payload at all — the HUD asks the
+conversation endpoint itself, exactly once), `chatgpt-shrink` (6 turns unmounted
+→ count must not roll back), `partial-nomain-script` (no `<main>` + 40 KB inline
+JSON blob — the shape that read 0 in the wild).
 The dropdown shots exist because the native `<select>` popup never appears in a
 CDP screenshot — the themed list is real DOM, so it CAN be reviewed as an image.
 Never drive the user's real Brave (`--load-extension`); use a separate profile dir.
@@ -784,8 +833,13 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
 - Bridge conversation parsing exists twice: `chatgpt-source-adapter.js`
   (`parseBridgeData`, rich migration shape with ids/timestamps/parents) and
   `chat-thread.js` (`extractConversationMessages`, minimal `{role, content}` for
-  counting). Unify when the adapter is next touched — the mapping walk and role
-  filter are the same logic.
+  counting — also used by the bridge client to validate payloads). Unify when the
+  adapter is next touched — the mapping walk and role filter are the same logic.
+- The whole-conversation endpoint list (`/backend-api/conversations/<id>` then
+  `/…/conversation/<id>`) is inferred from the migration adapter, not documented
+  by ChatGPT; the plural endpoint may need `?num_turns=` on some builds. The
+  "weak read" + fetch logs say which path answered (or that both 404'd), so the
+  list can be corrected from a user's Copy logs.
 - `m365.cloud.microsoft` (Copilot) and `x.com` (Grok) are in `manifest.json` but
   not in `platforms.js:hosts` — no registry selectors/budget there, so the HUD
   falls back to a hostname label and 200k/2.0 defaults.

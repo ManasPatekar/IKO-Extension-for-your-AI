@@ -12,7 +12,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const { extractChatThread, extractConversationMessages, selectorsFor, readText, textOf, matchPlatform } = require("../core/chat-thread.js");
+const { extractChatThread, extractConversationMessages, debugReading, selectorsFor, readText, textLength, textOf, matchPlatform } = require("../core/chat-thread.js");
 
 let order = 0;
 
@@ -31,6 +31,7 @@ function node(tag, { text = "", attrs = {}, innerText } = {}) {
         children: [],
         parent: null,
         get innerText() { return el._hidden ? "" : collapse(el.textContent); },
+        get id() { return el._attrs.id || ""; },
         get textContent() {
             let out = "";
             for (const child of el.childNodes) out += child.textContent;
@@ -364,6 +365,102 @@ test("a wrapper whose markdown body is still empty keeps its message", () => {
     assert.equal(result.source, "selectors");
     assert.equal(result.messages.length, 1);
     assert.equal(result.messages[0].content, "Question typed by the user.");
+});
+
+test("debugReading fingerprints an unreadable page for Copy logs", () => {
+    const thread = node("div", { attrs: { id: "thread", class: "scroller" } });
+    thread.appendChild(node("msg-body", { text: big("First") }));
+    thread.appendChild(node("msg-body", { text: big("Second") }));
+    const main = node("main");
+    main.appendChild(thread);
+
+    installDom({ main, selectors: {} });
+
+    const info = debugReading("chatgpt");
+    assert.equal(info.selectors["[data-message-author-role]"], 0);
+    assert.equal(info.matched, 0);
+    assert.match(info.container, /<div#thread\.scroller>/);
+    assert.ok(info.containerChars > 200, `chars=${info.containerChars}`);
+    assert.equal(info.containerBlocks, 2);
+    assert.equal(info.descended, true);
+});
+
+test("readText pierces shadow DOM", () => {
+    const host = node("div", { attrs: { id: "shadow-host" } });
+    host.childNodes = [];
+    const shadowRoot = {
+        nodeType: 1,
+        tagName: "DIV",
+        childNodes: [textNode("shadow message text")],
+        children: [],
+        shadowRoot: null,
+        textContent: "shadow message text",
+        getAttribute() { return null; },
+        querySelector() { return null; },
+        querySelectorAll() { return []; },
+        contains() { return false; },
+        compareDocumentPosition() { return 2; },
+        appendChild() { return null; }
+    };
+    host.shadowRoot = shadowRoot;
+
+    assert.equal(readText(host), "shadow message text");
+    assert.ok(textLength(host) > 0, "textLength should pierce shadow DOM");
+});
+
+// Backtracking: short messages (<120 chars each) mean looksLikeList never
+// fires at the message-list level, so the old walk would descend into a
+// single short message and end at a sub-120-char element → 0 tokens.
+// The walk must backtrack to the message list and count the whole thread.
+test("short messages are backtracked to the message list, not walked into", () => {
+    const main = node("main");
+    const list = node("div", { attrs: { id: "message-list" } });
+    // Each message is short (<120 chars), so no single block triggers looksLikeList.
+    for (let i = 1; i <= 6; i++) {
+        list.appendChild(node("msg-body", { text: `Message ${i}: short turn text here.` }));
+    }
+    main.appendChild(list);
+
+    installDom({ main, selectors: {} });
+
+    const result = extractChatThread("unknown-site");
+    assert.equal(result.source, "thread");
+    assert.equal(result.messages.length, 1);
+    for (let i = 1; i <= 6; i++) {
+        assert.ok(result.messages[0].content.includes(`Message ${i}:`), `missing message ${i}`);
+    }
+});
+
+// Deep scan: when selectors match nothing and threadContainer finds nothing,
+// the deep scan should find the largest text block under body.
+test("deep scan finds the conversation when nothing else works", () => {
+    // No <main>, no [role=main], just a raw div with conversation text under body.
+    const convo = node("div", { attrs: { id: "convo", class: "chat-area" } });
+    convo.appendChild(node("msg-body", { text: big("First message") }));
+    convo.appendChild(node("msg-body", { text: big("Second message") }));
+    const body = node("body");
+    body.appendChild(convo);
+    // Some page chrome that must not be confused with the conversation.
+    body.appendChild(node("nav", { text: big("Sidebar chrome") }));
+
+    installDom({ body, selectors: {} });
+
+    const result = extractChatThread("chatgpt");
+    assert.equal(result.source, "thread");
+    assert.ok(result.messages[0].content.includes(big("First message")), "conversation text found");
+    assert.ok(!/Sidebar chrome/.test(result.messages[0].content), "sidebar not counted");
+});
+
+test("a page with no conversation at all still returns none", () => {
+    const body = node("body");
+    body.appendChild(node("nav", { text: big("Just page chrome") }));
+    body.appendChild(node("header", { text: big("More chrome") }));
+
+    installDom({ body, selectors: {} });
+
+    const result = extractChatThread("chatgpt");
+    assert.equal(result.source, "none");
+    assert.equal(result.messages.length, 0);
 });
 
 // ---------------------------------------------------------------------------
