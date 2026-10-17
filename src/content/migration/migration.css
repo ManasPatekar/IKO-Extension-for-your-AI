@@ -358,6 +358,213 @@
 
 
 /* ================================
+   RETRO DROPDOWN
+   Replaces the native <select> popup, which the browser paints itself
+   (system font, OS-blue highlight) and our CSS cannot reach.
+================================ */
+
+.iko-dd {
+    position: relative !important;
+
+    display: block !important;
+
+    margin-top: 8px !important;
+}
+
+/* the native select stays as the value holder, but never shows */
+.iko-dd-native {
+    position: absolute !important;
+
+    width: 1px !important;
+    height: 1px !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    overflow: hidden !important;
+
+    border: 0 !important;
+
+    opacity: 0 !important;
+
+    clip-path: inset(50%) !important;
+
+    pointer-events: none !important;
+    white-space: nowrap !important;
+}
+
+.iko-dd-trigger {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+
+    width: 100% !important;
+    height: 42px !important;
+
+    padding: 0 11px !important;
+
+    box-sizing: border-box !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    outline: none !important;
+
+    background: var(--iko-field) !important;
+    color: var(--iko-text) !important;
+
+    font-family: var(--iko-font-body) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+
+    text-align: left !important;
+
+    cursor: pointer !important;
+
+    box-shadow: var(--iko-shadow-sm) !important;
+
+    transition:
+        box-shadow var(--iko-fast),
+        transform var(--iko-fast),
+        background 0.15s ease !important;
+}
+
+.iko-dd-trigger:hover,
+.iko-dd[data-open="true"] .iko-dd-trigger {
+    transform: translate(2px, 2px) !important;
+    box-shadow: 0 0 0 var(--iko-ink) !important;
+}
+
+.iko-dd-trigger:focus-visible {
+    outline: 3px solid var(--iko-pink) !important;
+    outline-offset: 2px !important;
+}
+
+.iko-dd-value {
+    flex: 1 1 auto !important;
+
+    min-width: 0 !important;
+
+    overflow: hidden !important;
+
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+.iko-dd-caret {
+    display: inline-flex !important;
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+    justify-content: center !important;
+
+    color: currentColor !important;
+
+    transition: transform var(--iko-fast) !important;
+}
+
+.iko-dd[data-open="true"] .iko-dd-caret {
+    transform: rotate(180deg) !important;
+}
+
+/* portalled to the overlay when open, so the card's overflow can't clip it;
+   fixed so the placement maths is always plain viewport coordinates.
+   left/top/width/max-height are set inline because !important would win here */
+.iko-dd-menu {
+    position: fixed !important;
+
+    z-index: 8 !important;
+
+    box-sizing: border-box !important;
+
+    padding: 6px !important;
+
+    border: var(--iko-border-thin) !important;
+    border-radius: var(--iko-radius) !important;
+
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+
+    background: var(--iko-surface) !important;
+    color: var(--iko-text) !important;
+
+    font-family: var(--iko-font-body) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+
+    box-shadow: var(--iko-shadow-lg) !important;
+
+    color-scheme: var(--iko-scheme) !important;
+}
+
+.iko-dd-menu::-webkit-scrollbar {
+    width: 10px !important;
+}
+
+.iko-dd-menu::-webkit-scrollbar-track {
+    background: var(--iko-surface) !important;
+}
+
+.iko-dd-menu::-webkit-scrollbar-thumb {
+    border: var(--iko-border-thin) !important;
+    background: var(--iko-pink) !important;
+}
+
+.iko-dd-option {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+
+    height: 32px !important;
+
+    padding: 0 10px !important;
+
+    box-sizing: border-box !important;
+
+    border-radius: 0 !important;
+
+    color: var(--iko-text) !important;
+
+    cursor: pointer !important;
+
+    white-space: nowrap !important;
+}
+
+/* current value: muted fill (hover below wins, so it stays legible) */
+.iko-dd-option[data-current="true"] {
+    background: var(--iko-surface-muted) !important;
+}
+
+/* hover + keyboard cursor: bright accent, so text must stay BLACK in both
+   themes (the accent values do not change with the theme, the text does) */
+.iko-dd-option:hover,
+.iko-dd-option[data-active="true"] {
+    background: var(--iko-yellow) !important;
+    color: var(--iko-black) !important;
+}
+
+.iko-dd-option-text {
+    overflow: hidden !important;
+
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+.iko-dd-check {
+    display: none !important;
+    flex: 0 0 auto !important;
+
+    align-items: center !important;
+}
+
+.iko-dd-option[data-current="true"] .iko-dd-check {
+    display: inline-flex !important;
+}
+
+
+/* ================================
    INFO
 ================================ */
 

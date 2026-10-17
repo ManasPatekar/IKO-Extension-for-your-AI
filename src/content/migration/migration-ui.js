@@ -138,6 +138,224 @@
         container.hidden = false;
     }
 
+    /* ---- Retro dropdown ----------------------------------------------------
+       Chrome draws the native <select> popup itself — system font, OS-blue
+       highlight — and our CSS never reaches it (only `option` colours, and not
+       on every platform). So the destination picker is a real listbox we own
+       end to end. The native <select> stays in the DOM as the value holder
+       (visually hidden) so "change" listeners and .value reads keep working.
+       On open the menu is portalled to the overlay, because the dialog card is
+       `overflow: hidden` and would clip it.
+    ------------------------------------------------------------------------ */
+    const DD_MENU_MAX = 320;
+    const DD_GAP = 6;
+    let ddSeq = 0;
+
+    function createDropdown({ options = [], value = "", onChange, ariaLabel } = {}) {
+        const uid = "iko-dd-" + (++ddSeq);
+
+        const wrap = el("div", "iko-dd");
+        wrap.dataset.open = "false";
+
+        const trigger = el("button", "iko-dd-trigger");
+        trigger.type = "button";
+        trigger.setAttribute("aria-haspopup", "listbox");
+        trigger.setAttribute("aria-expanded", "false");
+        trigger.setAttribute("aria-controls", uid + "-menu");
+        if (ariaLabel) trigger.setAttribute("aria-label", ariaLabel);
+
+        const valueNode = el("span", "iko-dd-value");
+        const caret = el("span", "iko-dd-caret");
+        caret.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><polyline points="5.5 8.5 12 15 18.5 8.5"/></svg>';
+        trigger.append(valueNode, caret);
+        const menu = el("div", "iko-dd-menu");
+        menu.id = uid + "-menu";
+        menu.setAttribute("role", "listbox");
+        menu.hidden = true;
+        // keep focus on the trigger (and its focus ring) while clicking options
+        menu.addEventListener("mousedown", event => event.preventDefault());
+
+        // both live in the wrapper while closed; the menu jumps to the overlay on open
+        wrap.append(trigger, menu);
+
+        const nodes = [];
+        const found = options.findIndex(o => o.value === value);
+        let current = found < 0 ? 0 : found;
+        let active = current;
+        let open = false;
+
+        options.forEach((opt, index) => {
+            const node = el("div", "iko-dd-option");
+            node.id = uid + "-opt-" + index;
+            node.setAttribute("role", "option");
+            node.setAttribute("aria-selected", "false");
+            node.dataset.value = opt.value;
+            node.appendChild(el("span", "iko-dd-option-text", opt.text));
+            const check = el("span", "iko-dd-check");
+            check.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><polyline points="4.5 12.5 10 18 19.5 6.5"/></svg>';
+            node.appendChild(check);
+            node.addEventListener("click", () => pick(opt.value));
+            node.addEventListener("mousemove", () => { if (open) setActive(index); });
+            menu.appendChild(node);
+            nodes.push(node);
+        });
+
+        function sync() {
+            const opt = options[current];
+            valueNode.textContent = opt ? opt.text : "";
+            nodes.forEach((node, index) => {
+                node.setAttribute("aria-selected", index === current ? "true" : "false");
+                if (index === current) node.dataset.current = "true";
+                else delete node.dataset.current;
+            });
+        }
+
+        function setActive(index) {
+            if (!nodes.length) return;
+            active = (index + nodes.length) % nodes.length;
+            nodes.forEach((node, i) => {
+                if (i === active) node.dataset.active = "true";
+                else delete node.dataset.active;
+            });
+            const node = nodes[active];
+            trigger.setAttribute("aria-activedescendant", node.id);
+            if (node.offsetTop < menu.scrollTop) menu.scrollTop = node.offsetTop;
+            else if (node.offsetTop + node.offsetHeight > menu.scrollTop + menu.clientHeight) {
+                menu.scrollTop = node.offsetTop + node.offsetHeight - menu.clientHeight;
+            }
+        }
+
+        // size + place the menu against the trigger; flip up when there is more
+        // room above, and clamp into the viewport so it is never cut off or
+        // pushed off-screen, scrolling internally when the space is tight.
+        // The menu is position:fixed, so these are plain viewport coordinates.
+        function position() {
+            if (!document.getElementById(UI_ID)) return;
+            const box = trigger.getBoundingClientRect();
+            menu.style.maxHeight = "none";
+            // scrollHeight measures the padding box, but max-height clamps the
+            // border box (border-box sizing) — add the borders back, or a 2px
+            // outline eats 4px of list and forces a pointless scrollbar
+            const menuStyle = getComputedStyle(menu);
+            const borderY = (parseFloat(menuStyle.borderTopWidth) || 0) + (parseFloat(menuStyle.borderBottomWidth) || 0);
+            const natural = Math.min(Math.ceil(menu.scrollHeight) + borderY, DD_MENU_MAX);
+
+            const pad = 8;
+            const width = Math.min(box.width, window.innerWidth - pad * 2);
+            const below = window.innerHeight - box.bottom - DD_GAP - pad;
+            const above = box.top - DD_GAP - pad;
+            const downward = natural <= below || below >= above;
+            const height = Math.min(natural, Math.max(120, Math.round(downward ? below : above)));
+
+            let top = downward ? box.bottom + DD_GAP : box.top - DD_GAP - height;
+            top = Math.max(pad, Math.min(top, window.innerHeight - pad - height));
+            const left = Math.max(pad, Math.min(box.left, window.innerWidth - pad - width));
+
+            menu.style.width = width + "px";
+            menu.style.maxHeight = height + "px";
+            menu.style.left = left + "px";
+            menu.style.top = top + "px";
+            menu.dataset.side = downward ? "down" : "up";
+        }
+
+        function pick(next) {
+            const index = options.findIndex(o => o.value === next);
+            if (index < 0) return;
+            const changed = index !== current;
+            current = index;
+            sync();
+            close();
+            trigger.focus();
+            if (changed) onChange?.(next);
+        }
+
+        function onDocumentClick(event) {
+            if (wrap.contains(event.target) || menu.contains(event.target)) return;
+            close();
+        }
+
+        function openMenu() {
+            if (open || !nodes.length) return;
+            open = true;
+            wrap.dataset.open = "true";
+            trigger.setAttribute("aria-expanded", "true");
+            menu.hidden = false;
+            (document.getElementById(UI_ID) || wrap).appendChild(menu);
+            setActive(current);
+            position();
+            document.addEventListener("click", onDocumentClick, true);
+            window.addEventListener("resize", position, true);
+            document.addEventListener("scroll", position, true);
+        }
+
+        function close() {
+            if (!open) return;
+            open = false;
+            wrap.dataset.open = "false";
+            trigger.setAttribute("aria-expanded", "false");
+            trigger.removeAttribute("aria-activedescendant");
+            nodes.forEach(node => { delete node.dataset.active; });
+            menu.hidden = true;
+            delete menu.dataset.side;
+            menu.removeAttribute("style");
+            menu.scrollTop = 0;
+            wrap.appendChild(menu);
+            document.removeEventListener("click", onDocumentClick, true);
+            window.removeEventListener("resize", position, true);
+            document.removeEventListener("scroll", position, true);
+        }
+
+        trigger.addEventListener("click", () => { if (open) close(); else openMenu(); });
+
+        trigger.addEventListener("keydown", event => {
+            const key = event.key;
+            if (key === "Escape") {
+                // when closed let Escape through, so it closes the whole panel
+                if (!open) return;
+                event.preventDefault();
+                event.stopPropagation();
+                close();
+                return;
+            }
+            if (key === "Tab") {
+                close();
+                return;
+            }
+            if (key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === " ") {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!open) { openMenu(); return; }
+                if (key === "ArrowDown") setActive(active + 1);
+                else if (key === "ArrowUp") setActive(active - 1);
+                else pick(options[active]?.value);
+                return;
+            }
+            if (open && (key === "Home" || key === "End")) {
+                event.preventDefault();
+                setActive(key === "Home" ? 0 : nodes.length - 1);
+            }
+        });
+
+        sync();
+
+        return {
+            wrap,
+            setValue(next) {
+                const index = options.findIndex(o => o.value === next);
+                if (index < 0) return;
+                current = index;
+                sync();
+            },
+            destroy() {
+                close();
+                document.removeEventListener("click", onDocumentClick, true);
+                window.removeEventListener("resize", position, true);
+                document.removeEventListener("scroll", position, true);
+                menu.remove();
+            }
+        };
+    }
+
     function createMigrationUI(options = {}) {
         document.getElementById(UI_ID)?.remove();
 
@@ -179,21 +397,26 @@
         destinationCard.appendChild(el("div", "iko-card-label", "DESTINATION"));
         const destTitle = el("div", "iko-card-title", options.destinationName || "Destination AI");
         destinationCard.appendChild(destTitle);
-        // Universal: let user pick any LLM, not just auto-paired one
+        // Universal: let user pick any LLM, not just the auto-paired one.
+        // The themed listbox drives the choice; the <select> below stays as the
+        // value holder so the change handler keeps working untouched.
+        const dests = (options.destinations || []).slice();
+        if (!dests.length) {
+            dests.push({
+                id: options.destinationId || "",
+                name: options.destinationName || "Destination AI"
+            });
+        }
+
         const destSelect = document.createElement("select");
-        destSelect.className = "iko-migration-select";
-        const dests = options.destinations || [];
+        destSelect.className = "iko-dd-native";
+        destSelect.tabIndex = -1;
+        destSelect.setAttribute("aria-hidden", "true");
         for (const d of dests) {
             const opt = document.createElement("option");
             opt.value = d.id;
             opt.textContent = d.name;
             if (d.id === options.destinationId) opt.selected = true;
-            destSelect.appendChild(opt);
-        }
-        if (!dests.length) {
-            const opt = document.createElement("option");
-            opt.value = options.destinationId || "";
-            opt.textContent = options.destinationName || "Destination AI";
             destSelect.appendChild(opt);
         }
         destSelect.addEventListener("change", () => {
@@ -214,7 +437,16 @@
                 options.onDestinationChange?.(chosen.id);
             }
         });
-        destinationCard.appendChild(destSelect);
+        const destDropdown = createDropdown({
+            options: dests.map(d => ({ value: d.id, text: d.name })),
+            value: destSelect.value,
+            ariaLabel: "Destination AI platform",
+            onChange: next => {
+                destSelect.value = next;
+                destSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+        });
+        destinationCard.append(destDropdown.wrap, destSelect);
         destinationCard.appendChild(el("div", "iko-card-description", "Pick any LLM to send this session to."));
         body.appendChild(destinationCard);
 
@@ -451,6 +683,7 @@
         requestAnimationFrame(() => root.classList.add("iko-migration-visible"));
 
         function closeMigrationPanel() {
+            try { destDropdown?.destroy?.(); } catch { /* ignore */ }
             try { window.removeEventListener("iko-log-updated", refreshLogs); } catch { /* ignore */ }
             document.removeEventListener("keydown", escape);
             root.remove();
