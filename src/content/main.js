@@ -1,20 +1,30 @@
 "use strict";
 
 import { countTokens } from "gpt-tokenizer";
+import chatThread from "../migration/core/chat-thread.js";
 import "./ui.js";
 import "./chatgpt-bridge-client.js";
 import "./attachments/attachment-saver.js";
 
 window.IKO = window.IKO || {};
+// Shared thread reader (also reusable by migration code and test harnesses).
+window.IKO.chatThread = chatThread;
 
 let timer = null;
 let counting = false;
+let lastSignature = "";
+
+// One message can be huge (a pasted document). The tokenizer runs at ~35M
+// chars/s, so this is only a guard against pathological pages.
+const MAX_MESSAGE_CHARS = 400000;
 
 function resetCounting() {
     counting = false;
 }
 window.IKO.resetCounting = resetCounting;
 
+// Label fallback for hosts the platform registry does not know. Budgets and
+// prices always come from platforms.js — never from a second table here.
 function detectPlatform() {
     try {
         const d = window.IKO?.platform?.detect?.();
@@ -32,115 +42,141 @@ function detectPlatform() {
     if (h.includes("chatgpt") || h.includes("openai")) return "ChatGPT";
     return "AI";
 }
-const BUDGETS = { ChatGPT: 200000, Claude: 200000, Gemini: 1000000, Perplexity: 127000, Copilot: 128000, Grok: 131000, DeepSeek: 64000, Mistral: 32000, Poe: 128000 };
-const PRICES = { ChatGPT: 2.5, Claude: 3.0, Gemini: 1.25, Perplexity: 1.0, Copilot: 2.0, Grok: 2.0, DeepSeek: 0.5, Mistral: 1.0, Poe: 2.0 };
-function textOf(el) {
-    const md = el.querySelector?.(".markdown, [data-testid='markdown']");
-    return ((md || el).innerText || el.textContent || "").trim();
-}
 
-function fallbackBlocks() {
-    const main = document.querySelector("main") || document.body;
-    const out = [];
+function platformInfo() {
+    let match = null;
     try {
-        const cands = [];
-        for (const el of Array.from(main.querySelectorAll("div, article, section, p")).slice(0, 2500)) {
-            if (!(el instanceof HTMLElement)) continue;
-            if (/^(SCRIPT|STYLE|NAV|HEADER|FOOTER|BUTTON|TEXTAREA)$/.test(el.tagName)) continue;
-            if (el === main || el.hasAttribute?.("data-app-shell-thread-content-overlap")) continue;
-            const t = (el.innerText || "").trim();
-            if (t.length < 120 || t.length > 50000) continue;
-            cands.push({ el, len: t.length, text: t });
-            if (cands.length > 1200) break;
-        }
-        // leaf-only: drop containers that contain another candidate
-        const leaves = cands.filter(a => !cands.some(b => b !== a && a.el.contains(b.el) && b.text.length > 80));
-        leaves.sort((a, b) => a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-        const seen = new Set();
-        for (const k of leaves) {
-            const key = k.text.slice(0, 120);
-            if (seen.has(key)) continue;
-            seen.add(key);
-            if (out.length && out[out.length - 1].content === k.text) continue;
-            out.push({ role: out.length % 2 === 0 ? "user" : "assistant", content: k.text, fallback: true });
-            if (out.length >= 80) break;
-        }
-    } catch { /* ignore */ }
-    return out;
+        match = typeof chatThread.matchPlatform === "function" ? chatThread.matchPlatform(location.hostname) : null;
+    } catch { match = null; }
+    return {
+        id: match?.id || "",
+        name: match?.name || detectPlatform(),
+        budget: Number(window.IKO.config?.contextBudget || match?.budget || 200000),
+        price: Number(match?.pricePer1M ?? 2.0)
+    };
 }
 
-function extractMessages() {
-    // Gemini homepage / new chat: no active conversation yet — don't count
-    // page chrome or welcome text as context.
+// Gemini /app is the empty "new chat" screen: no conversation to count, and the
+// welcome text must not show up as context.
+function hasActiveConversation() {
     const h = location.hostname.toLowerCase();
     const p = location.pathname;
-    if (h.includes("gemini") && (p === "/app" || p === "/app/")) {
-        return [];
-    }
+    return !(h.includes("gemini") && (p === "/app" || p === "/app/"));
+}
 
-    // Keep in sync with chatgpt-source-adapter: ChatGPT renamed DOM in 2025-26.
-    const selectors = [
-        "[data-message-author-role]",
-        '[data-testid^="conversation-turn-"]',
-        "[data-message-id]",
-        "main article",
-        "main [data-turn]",
-        'main div[id^="message-"]'
-    ];
-    const seen = new Set();
-    const nodes = [];
-    for (const sel of selectors) {
-        try {
-            for (const n of document.querySelectorAll(sel)) {
-                if (!seen.has(n)) { seen.add(n); nodes.push(n); }
-            }
-        } catch { /* bad selector on old Chrome */ }
-    }
-    const structured = nodes
-        .map((element) => {
-            const roleAttr = element.getAttribute("data-message-author-role");
-            const testid = element.getAttribute("data-testid") || "";
-            const role = roleAttr === "assistant" ? "assistant"
-                : roleAttr === "system" ? "system"
-                : /assistant/i.test(testid) ? "assistant" : "user";
-            const content = textOf(element);
-            if (!content || content.length < 2) return null;
-            return { role, content };
-        })
-        .filter(Boolean);
-    // dedupe identical neighbours (nested selectors double-count)
-    const deduped = structured.filter((m, i) => i === 0 || m.content !== structured[i - 1].content);
-    if (deduped.length >= 1) return deduped;
+function readThread(platformId) {
+    if (!hasActiveConversation()) return { messages: [], source: "none" };
+    if (typeof chatThread.extractChatThread !== "function") return { messages: [], source: "none" };
+    return chatThread.extractChatThread(platformId);
+}
 
-    const fb = fallbackBlocks().filter(b => b.content.length > 120 && !/^Ask ChatGPT/i.test(b.content));
-    if (fb.length) {
-        try { window.IKO?.logger?.warn?.("ChatGPT-HUD", `fallback used: ${fb.length} blocks`, {}); } catch { /* ignore */ }
-        console.log(`[IKO:ChatGPT-HUD] fallback used: ${fb.length} blocks`);
-        return fb;
+// --- whole-conversation counting ---------------------------------------------
+// The DOM only holds the turns the site happens to have mounted (long chats
+// unmount / virtualise history). The page bridge captures the API payload the
+// site itself fetched, whose mapping holds the whole conversation — the number
+// that matters when deciding to migrate. It is only as fresh as the last fetch,
+// so it is combined with the live DOM reading, never replacing it.
+let bridgeCache = { payload: null, messages: [], tokens: -1 };
+// Rolling back the count when a site unmounts old turns would state the
+// opposite of the truth ("less context in use"). Keep the largest count seen
+// for this conversation; starting or switching chats resets it.
+let highWater = { key: "", tokens: 0 };
+
+function conversationKey() {
+    return `${location.hostname}${location.pathname}`;
+}
+
+function bridgeMessages() {
+    try {
+        const payload = window.IKO?.chatgptBridge?.latestConversation;
+        if (!payload) return [];
+        if (payload !== bridgeCache.payload) {
+            const messages = typeof chatThread.extractConversationMessages === "function"
+                ? chatThread.extractConversationMessages(payload)
+                : null;
+            bridgeCache = { payload, messages: Array.isArray(messages) ? messages : [], tokens: -1 };
+        }
+        return bridgeCache.messages;
+    } catch { return []; }
+}
+
+function bridgeTokens() {
+    const messages = bridgeMessages();
+    if (!messages.length) return -1;
+    if (bridgeCache.tokens < 0) {
+        bridgeCache.tokens = messages.reduce(
+            (total, message) => total + countTokens(String(message.content || "").slice(0, MAX_MESSAGE_CHARS)),
+            0
+        );
     }
-    return deduped;
+    return bridgeCache.tokens;
+}
+
+// Re-tokenising an unchanged thread every 2s burns CPU for nothing. The
+// signature also lets the HUD skip idle renders without going stale.
+function signature(info, messages, source, fullTokens) {
+    let hash = 2166136261;
+    const mix = (text) => {
+        for (let i = 0; i < text.length; i++) {
+            hash ^= text.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+    };
+    mix(`${info.name}|${source}|${messages.length}|${fullTokens}`);
+    for (const message of messages) mix(message.content);
+    return (hash >>> 0).toString(16);
 }
 
 function update() {
     if (!window.IKO.ui) return;
     if (counting) return;
 
+    const info = platformInfo();
+
+    const key = conversationKey();
+    if (highWater.key !== key) highWater = { key, tokens: 0 };
+
     let messages = [];
+    let source = "none";
+    let reason = "";
     try {
-        messages = extractMessages();
-    } catch {
+        const thread = readThread(info.id);
+        messages = thread.messages || [];
+        source = thread.source || "none";
+        reason = thread.reason || "";
+    } catch (error) {
+        console.warn("[IKO ChatGPT] Thread read failed:", error);
         messages = [];
     }
 
-    if (!messages.length) {
-        window.IKO.ui.update({
-            platform: detectPlatform(),
+    // The bridge payload is the whole conversation on sites that publish one,
+    // even when the DOM currently shows none of it.
+    const full = bridgeMessages();
+
+    if (!messages.length && !full.length) {
+        lastSignature = "";
+        // Make a site we cannot read diagnosable from the console / View logs.
+        console.log(`[IKO:ChatGPT-HUD] no messages in view — ${reason || "unknown"}`);
+        try { window.IKO.logger?.info?.("ChatGPT-HUD", `no messages in view — ${reason || "unknown"}`, { host: location.hostname }); } catch { /* ignore */ }
+        window.IKO.latestData = {
+            platform: info.name,
             tokens: 0,
             messageCount: 0,
             usagePercentage: 0,
             tokenizer: "o200k_base",
+            source,
+            reason,
             status: "Waiting for messages"
-        });
+        };
+        window.IKO.ui.update(window.IKO.latestData);
+        return;
+    }
+
+    const fullTokens = full.length ? bridgeTokens() : -1;
+    const sig = signature(info, messages, source, fullTokens);
+    if (sig === lastSignature && window.IKO.latestData) {
+        // Nothing new to count: keep the HUD in sync without re-tokenising.
+        window.IKO.ui.update(window.IKO.latestData);
         return;
     }
 
@@ -148,34 +184,45 @@ function update() {
     try {
         window.IKO.ui.setLoading(true, "Counting context…");
         try {
-            const usedFallback = messages.length && messages[0].fallback;
-            const tokens = messages.reduce(
-                (total, message) => total + countTokens(message.content.slice(0, 20000)),
+            const domTokens = messages.reduce(
+                (total, message) => total + countTokens(message.content.slice(0, MAX_MESSAGE_CHARS)),
                 0
             );
 
-            const plat = detectPlatform();
-            const budget = Number(window.IKO.config?.contextBudget || BUDGETS[plat] || 200000);
-            const price = PRICES[plat] || 2.0;
-            const cost = tokens / 1000000 * price;
-            const pct = Math.min(100, Math.round((tokens / budget) * 100));
-            const health = pct >= 95 ? "⚠ Context critical — migrate or summarize" : pct >= 80 ? "⚠ Context filling — consider migrate" : (usedFallback ? "Fallback estimate — verify roles" : "Local tokenizer estimate");
+            // Whole conversation when the page exposes it, live DOM otherwise,
+            // and never less than the largest count already seen here: a site
+            // that unmounts old turns must not look like it freed context.
+            const tokens = Math.max(domTokens, fullTokens, highWater.tokens);
+            highWater.tokens = tokens;
+            const whole = fullTokens > domTokens;
+            const usedSource = whole ? "conversation" : source;
+
+            const cost = tokens / 1000000 * info.price;
+            const pct = Math.min(100, Math.round((tokens / info.budget) * 100));
+            const health = pct >= 95 ? "⚠ Context critical — migrate or summarize"
+                : pct >= 80 ? "⚠ Context filling — consider migrate"
+                : usedSource === "conversation" ? "Full conversation"
+                : usedSource === "thread" ? "Thread estimate — no message markup"
+                : "Local tokenizer estimate";
 
             window.IKO.latestData = {
-                platform: plat,
+                platform: info.name,
                 tokens,
-                messageCount: messages.length,
+                messageCount: whole ? full.length : messages.length,
                 usagePercentage: pct,
                 tokenizer: "o200k_base",
                 cost,
+                source: usedSource,
+                reason: whole ? `bridge(${full.length} msgs)` : reason,
                 status: `${health} · ~$${cost.toFixed(3)}`
             };
 
+            lastSignature = sig;
             window.IKO.ui.update(window.IKO.latestData);
         } catch (error) {
             console.error("[IKO ChatGPT] Tokenizer failed:", error);
             window.IKO.ui.update({
-                platform: detectPlatform(),
+                platform: info.name,
                 tokens: 0,
                 messageCount: messages.length,
                 usagePercentage: 0,

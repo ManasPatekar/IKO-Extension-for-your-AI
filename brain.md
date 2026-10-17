@@ -50,7 +50,7 @@ src/injected/claude-bridge.js    MAIN world: patches fetch/XHR for /chat_convers
 src/injected/chatgpt-bridge.js   MAIN world: captures /backend-api/conversation*.
 src/content/migration/migration-entry.js  Bundles engine+adapters+platforms+optimizer+UI+main.
 src/content/migration/iko-log.js          Ring-buffer logger (500), diagnostics, copyAll.
-src/content/migration/migration-ui.js     Modal: source/dest cards, dest <select>,
+src/content/migration/migration-ui.js     Modal, dest card + themed dropdown,
                                           review+checklist, export/save, library, logs.
 src/content/migration/migration-main.js   Launcher removed (unified dock),
                                           direction, composer find/set (shadow-aware),
@@ -87,6 +87,19 @@ src/content/prompt-optimizer/optimizer-ui.js   Modal with modes/score/tips/copy/
 src/content/prompt-optimizer/optimizer-main.js Composer read/write + event listener.
 src/migration/platforms.js           SINGLE SOURCE OF TRUTH: id,name,hosts,newUrl,
                                      budget,pricePer1M,selectors,composers. Add LLM here.
+src/migration/core/chat-thread.js     Shared thread reader for the Context HUD:
+                                     platform selectors (from platforms.js) →
+                                     innermost-match pruning → whole-thread
+                                     estimate, plus `extractConversationMessages`
+                                     for bridge/API payloads (whole chat, not just
+                                     what the DOM mounts). Exports readText/matchPlatform.
+src/migration/tests/chat-thread.test.js  18 tests: double-count, per-platform
+                                     selectors, dedupe, thread estimate, partial
+                                     markup, welcome screen, chrome skip, hidden
+                                     innerText, budget contract per host, the
+                                     0-token traps (script blob, dominant last
+                                     turn, single-paragraph thread, empty markdown
+                                     wrapper), bridge conversation parsing.
 src/migration/core/schema.js         Session shape v1.0.0, roles, content types, validator.
 src/migration/core/normalizer.js     Raw → canonical, active-branch resolve, clone.
 src/migration/core/integrity.js      Canonical JSON → SHA-256 attach/verify.
@@ -143,12 +156,45 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
 - `ensureBot/wireActions/ensureActionsIn` backfill older HUDs. Actions resolve
   globals at click-time (load-order safe): `IKOMigrationMain.open`,
   `iko-optimize-requested` event.
-- `main.js` (all except Claude): `extractMessages` tries 6 selectors, else
-  leaf-fallback (`div/article/section/p` >120 chars, leaf-only, doc order,
-  alternating roles). `update()` every 2s with `counting` mutex:
-  `tokens=sum(countTokens(slice 20k))`, `budget=BUDGETS[platform]`,
-  `cost=tokens/1M*price`, `pct`, health (`≥80% filling, ≥95% critical`),
-  status `"<health> · ~$x.xxx"`. `BUDGETS/PRICES` inline mirror `platforms.js`.
+- `main.js` (all except Claude): token count comes from the SHARED reader
+  `src/migration/core/chat-thread.js` (`extractChatThread(platformId)`), which is
+  driven by the same per-platform selectors as migration
+  (`platforms.js` → `selectorsFor`), keeps only the INNERMOST match per nesting
+  (ChatGPT matches both the turn wrapper and the message body — counting both
+  doubled the tokens), and falls back to one whole-thread estimate
+  (`threadContainer()`: walk down from `<main>` while one child still holds
+  ≥70% of the text, **measuring noise-free text** — script/style/nav must never
+  win the walk, or an inline JSON state blob becomes "the thread" and the count
+  collapses to 0; the walk also stops as soon as a level splits into ≥2
+  message-sized blocks, so a chat dominated by its last answer is not walked
+  into a single paragraph). If the selector reading covers <25% of the thread
+  text and is under 1500 chars it is replaced by that estimate — a confident
+  tiny number is the bug users reported. When nothing is readable,
+  `extractChatThread` returns a `reason`
+  (`no-container`, `thread-too-small(n)`, `welcome-screen(n blocks)`) which
+  `main.js` writes to the console and to the log panel ("View logs → Copy logs"),
+  so an unreadable site is diagnosable from a screenshot of the logs.
+  `update()` every 2s with `counting` mutex: `budget/price` from
+  `matchPlatform(location.hostname)` (platforms.js is the only copy; the old
+  inline `BUDGETS/PRICES` tables are gone).
+  TWO SOURCES, ONE NUMBER: the DOM reading (what the page mounts) and, on
+  ChatGPT, the page bridge payload (`IKO.chatgptBridge.latestConversation` →
+  `extractConversationMessages()`: API `mapping` walked along
+  `current_node → parent`, so it is the whole conversation in order without dead
+  branches). `tokens = max(domTokens, bridgeTokens, highWater)` — the bridge
+  covers turns the DOM no longer mounts, and the per-conversation HIGH-WATER
+  mark (`hostname+pathname` key, reset when a chat is opened or started) stops
+  the count from rolling back when a site unmounts old turns while scrolling.
+  `cost`, `pct`, health (`≥80% filling, ≥95% critical`), status
+  `"<health> · ~$x.xxx"` with `"Full conversation"` when the bridge supplied the
+  number and `"Thread estimate — no message markup"` when the fallback did. An
+  FNV-1a signature of (platform, source, message texts, bridge tokens) skips
+  re-tokenising when the thread has not changed, so the HUD only moves when the
+  conversation moves. `window.IKO.chatThread` exposes the reader for other
+  modules and harnesses.
+  LIMIT: on sites with no bridge payload (everything but ChatGPT) only what is
+  in the DOM is counted — the high-water mark softens but cannot remove
+  virtualised-history under-reporting.
 - `claude-main.js`: reads `IKO.claudeBridge.latestConversation` or waits for
   `iko-claude-conversation-updated`, converts, `countClaudeTokens` (local
   estimate), per-model detect (`opus $15 / sonnet $3 / haiku $0.8`, all 200k) →
@@ -230,8 +276,9 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
 
 - Entry (`migration-entry.js`) exposes `IKOMigrationCore{engine,adapters,PLATFORMS}`,
   `IKOOptimizerCore{optimizePrompt}`, loads log→UI→main→optimizer UI→main.
-- Panel: direction bar, SOURCE card (auto), DESTINATION card with `<select>`
-  (all except current; dark `color-scheme:dark` + option bg fix), status,
+- Panel: direction bar, SOURCE card (auto), DESTINATION card with the themed
+  `.iko-dd` listbox (all platforms except current; the native `<select>` is kept
+  hidden as the value holder), status,
   review, `[Cancel][Prepare]`, `[Open X]`, `★ Saved sessions`, `View logs`.
 - Changing dest invalidates package: clears review, disables Open, resets
   Prepare text, status prompts re-Prepare (`migrationPackage=null` + engine rebuild).
@@ -572,13 +619,85 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
     reaches hover fills. The verify suites now READ the palette out of
     `style.css` instead of hardcoding hexes, so colour changes are re-checked
     automatically rather than silently drifting.
+44. Destination picker (your screenshot: the AI dropdown opening as a stock
+    white list with an OS-blue highlight). That popup is drawn by the BROWSER,
+    not by us — `<select>` options only accept a couple of colour properties and
+    the highlight ignores CSS entirely, so it can never match the theme on every
+    platform. Replaced with a real listbox (`createDropdown` in
+    `migration-ui.js`): `.iko-dd-trigger` + portalled `.iko-dd-menu`, full
+    keyboard support (arrows/Home/End/Enter/Escape, `aria-activedescendant`),
+    click-outside close, and a check mark on the current option. The native
+    `<select>` STAYS in the DOM as `.iko-dd-native`, visually hidden, so the
+    existing `change` listener and any `.value` reads keep working untouched.
+    GOTCHAS: (a) the dialog card is `overflow: hidden` AND is a containing block
+    for fixed descendants (it animates `transform`), so the open menu is
+    portalled to the overlay — `overflow: visible` — and is `position: fixed`
+    so the placement maths is plain viewport coordinates; (b) `scrollHeight`
+    measures the padding box while `max-height` clamps the border box, so the
+    borders must be added back or a 2px outline eats 4px and forces a scrollbar;
+    (c) the menu must be clamped INTO the viewport (roomier side + top/bottom
+    clamp), otherwise a short window can flip it off-screen. Verified by suite 2
+    opening it at 1200/800/600/460/360/300px tall. Escape in the open menu stops
+    propagation so it closes the LIST, not the whole panel.
+45. Context HUD counted the wrong thing (report: "stuck on Context 64, usage
+    <1%, bar not filling"). Three separate faults, all reproduced in a headless
+    harness that runs the REAL `dist/content.js` against synthetic conversation
+    DOMs (`iko-hud-repro.html` + `iko-hud-probe.mjs`, one case per platform):
+    (a) the HUD kept its own ChatGPT-only selector list, so every other platform
+        (Gemini `message-content`/`.query-content`, Perplexity
+        `[data-testid='answer']`, DeepSeek `.message-content`, …) fell into a
+        text-block heuristic that ignored blocks under 120 chars — i.e. most
+        user turns — and happily reported a tiny constant number;
+    (b) on ChatGPT the list matched BOTH the turn wrapper and the message body,
+        and only identical NEIGHBOURS were de-duplicated, so every message was
+        counted twice: 2x tokens, 28 "messages" for a 14-message chat;
+    (c) budgets/prices lived in a second inline table in `main.js`.
+    Fix: new shared reader `src/migration/core/chat-thread.js` (platform
+    selectors from platforms.js, innermost-match pruning, `readText` that falls
+    back to a DOM walk when Chrome reports empty innerText for unlaid-out
+    subtrees, whole-thread estimate with partial-read detection), budgets/prices
+    from `matchPlatform()`, and an FNV-1a signature so an unchanged thread is
+    not re-tokenised every 2s. Measured in the harness: ChatGPT 2002 → 1001
+    tokens (28 → 14 messages, both exactly matching ground truth), Gemini
+    472 → 1001, and a renamed-DOM case that used to read 13 tokens now reads the
+    whole thread (1001). Locked in by 11 node tests
+    (`npm run test:chatthread`) plus the harness suite; the button/popup suites
+    are untouched by it.
+46. Context HUD showed "0 / 0% / Waiting for messages" on a real ChatGPT chat
+    (user screenshot) — the counting fix above had four traps that all end in a
+    hard 0, because the fallback container was rejected after being mis-chosen:
+    (a) the thread walk measured `textContent`, so a huge inline
+        `<script type="application/json">` state blob out-texted the
+        conversation; the walk (and `readText`/`textLength`) now skip
+        SCRIPT/STYLE/NOSCRIPT/TEMPLATE, even as the walk's root;
+    (b) the walk had no stop condition, so a thread whose LAST answer holds
+        ≥70% of the text got walked into that one message, which then failed
+        the "≥2 blocks" guard → 0. It now stops as soon as a level already
+        splits into ≥2 message-sized blocks (`looksLikeList`);
+    (c) the "≥2 blocks" guard itself rejected legitimate one-paragraph threads;
+        it now only applies when `<main>`/`<body>` itself is the container
+        (i.e. no descent happened — the welcome-screen case);
+    (d) `textOf` read only the `.markdown` body, so a wrapper whose markdown is
+        empty (streaming placeholder, lazily filled turn) yielded "" and the
+        message was dropped; it now falls back to the wrapper.
+    Also: the HUD now reads the WHOLE conversation where the page publishes it
+    (`extractConversationMessages` on the ChatGPT bridge payload → `max(dom,
+    bridge, highWater)`), which is what "how full is my context before I
+    migrate?" actually needs — the bridge payload includes turns the DOM no
+    longer mounts. Verified in the harness with new cases: `dominant` (last
+    answer ≈86% of the text), `single` (one single-paragraph message),
+    `partial-nomain-script` (no `<main>`, 40 KB JSON blob, renamed markup),
+    `chatgpt-bridge` (60-message payload vs 14 mounted turns → "Full
+    conversation", 3300 vs 3330 ground truth) and `chatgpt-shrink` (6 turns
+    unmounted → count stays 1001). 18 node tests + 12 harness cases.
 
 ## 5. Build / test / run
 
 ```bash
 npm install
 node build.js        # or npm run build → dist/{content,claude-content,claude-bridge,chatgpt-bridge,migration}.js + css
-npm test             # 50 tests: 11 migration + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 fullhistory… (run it, don't trust the count)
+npm test             # 68 tests: 11 migration + 18 chat-thread + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 composer + 7 fullhistory… (run it, don't trust the count)
+npm run test:chatthread   # the Context HUD counting rules only
 ```
 
 UI verification harness (outside the repo, in `$HOME`) — computed-style checks in
@@ -590,7 +709,26 @@ node iko-verify2.mjs 9222 file://…/iko-ui-preview.html   # mock surfaces, ligh
 node iko-verify-real.mjs 9222 http://127.0.0.1:8731/preview.html  # real ui.js/migration-ui/optimizer-ui/attachment-saver
 node iko-verify-os-theme.mjs 9222 http://127.0.0.1:8731/preview.html  # preference order
 node iko-shot-zoom.mjs 9222 http://127.0.0.1:8731/preview.html        # zoomed clips, both themes
+node iko-shot-dropdown.mjs 9222 http://127.0.0.1:8731/preview.html     # destination list, OPEN
+node iko-shot-dropdown-full.mjs 9222 http://127.0.0.1:8731/preview.html  # rebuilt 9-platform list
+node iko-eval.mjs 9222 <url> '<js expression>'                         # one-off probe
+node iko-hud-probe.mjs 9222                                           # Context HUD count vs ground truth, per platform DOM
 ```
+The HUD probe is the only way to test token counting without a logged-in site:
+`iko-serve.cjs` also serves the built bundles (there is a `dist → repo/dist`
+symlink in `$HOME`), `iko-hud-repro.html` builds a synthetic conversation for a
+chosen DOM shape plus noise chrome and loads the REAL `dist/content.js`, and the
+probe compares the HUD's number against `countTokens()` of the same text in
+Node. Cases (12, 48 assertions): `chatgpt`, `gemini`, `perplexity`, `deepseek`,
+`generic` (article markup), `partial` (renamed markup → thread estimate),
+`chatgpt-grow` (must increase when 4 more turns arrive), `dominant` (the last
+answer holds ~86% of the text), `single` (one single-paragraph message),
+`chatgpt-bridge` (whole-conversation payload exceeds the mounted DOM →
+"Full conversation"), `chatgpt-shrink` (6 turns unmounted → count must not roll
+back), `partial-nomain-script` (no `<main>` + 40 KB inline JSON blob — the
+shape that read 0 in the wild).
+The dropdown shots exist because the native `<select>` popup never appears in a
+CDP screenshot — the themed list is real DOM, so it CAN be reviewed as an image.
 Never drive the user's real Brave (`--load-extension`); use a separate profile dir.
 Load: `chrome://extensions` → Developer → Load unpacked → folder with
 `manifest.json`. Open **fresh** LLM tab (old tabs → `Extension context invalidated`).
@@ -609,7 +747,13 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
   string, add client (copy `chatgpt-bridge-client.js`), build entry in `build.js`,
   MAIN entry in `manifest.json`, parse in source adapter (prefer API → DOM).
 - New HUD metric: compute in `main.js/claude-main.js:update()`, pass in
-  `latestData`, render in `ui.js:update()`. Keep `counting` mutex + slice 20k.
+  `latestData`, render in `ui.js:update()`. Keep the `counting` mutex and the
+  change signature so an unchanged thread is not re-tokenised every tick.
+- Reading a conversation from the DOM: call `extractChatThread()` from
+  `src/migration/core/chat-thread.js`. Platform selectors live in
+  `platforms.js` ONLY — when a feature needs a selector list, extend the
+  registry (or `UNIVERSAL_SELECTORS` in `chat-thread.js`), never inline a copy:
+  three copies of the same list is exactly why the HUD read only ChatGPT.
 - New migration step: add to `migration-state.js` stages + `engine.run()`
   between validate/package; log via `IKO.logger`; cover in `migration.test.js`.
 - New modal feature: extend `migration-ui.js` with `details` section +
@@ -629,6 +773,25 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
   are dead duplicates — delete after confirming no import.
 - Token counts are local estimates (Claude chars/4, others o200k). Add localhost
   `count_tokens` proxy or per-model limit API for exact server-side counts.
+- The HUD counts only what is IN the DOM (plus, on ChatGPT, the bridge payload
+  when the page has fetched it): history a site has unmounted (virtualised) is
+  invisible to a passive reader, so very long chats can under-report. The
+  per-conversation high-water mark keeps the number from going backwards, but it
+  cannot invent turns it never saw. Migration sidesteps this by scrolling with
+  `loadAllHistory()`; doing that from the HUD would fight the user, so it stays
+  passive. Non-ChatGPT platforms have no bridge payload yet (Claude has one and
+  uses it in `claude-main.js`).
+- Bridge conversation parsing exists twice: `chatgpt-source-adapter.js`
+  (`parseBridgeData`, rich migration shape with ids/timestamps/parents) and
+  `chat-thread.js` (`extractConversationMessages`, minimal `{role, content}` for
+  counting). Unify when the adapter is next touched — the mapping walk and role
+  filter are the same logic.
+- `m365.cloud.microsoft` (Copilot) and `x.com` (Grok) are in `manifest.json` but
+  not in `platforms.js:hosts` — no registry selectors/budget there, so the HUD
+  falls back to a hostname label and 200k/2.0 defaults.
+- `universal-source-adapter.js` still carries its own copy of the selector list
+  and a block fallback. It could read `chat-thread.js` instead; left untouched so
+  migration behaviour stays frozen (its selector list is already platform-aware).
 - ChatGPT `REQUEST_REFRESH` still no-op on bridge side; relies on natural fetch + direct API.
 - `integrity.js` canonical subset vs schema drift — keep aligned.
 - Fallback roles positional when toolbar signal absent — verify in preview.

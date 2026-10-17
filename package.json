@@ -13,7 +13,8 @@
     "test:claude": "node --test src/migration/tests/claude.test.js",
     "test:composer": "node --test src/migration/tests/composer-io.test.js",
     "test:fullhistory": "node --test src/migration/tests/full-history.test.js",
-    "test": "node --test src/migration/tests/migration.test.js src/migration/tests/sir.test.js src/migration/tests/pdf.test.js src/migration/tests/ocr.test.js src/migration/tests/retrieval.test.js src/migration/tests/claude.test.js src/migration/tests/composer-io.test.js src/migration/tests/full-history.test.js"
+    "test:chatthread": "node --test src/migration/tests/chat-thread.test.js",
+    "test": "node --test src/migration/tests/migration.test.js src/migration/tests/sir.test.js src/migration/tests/pdf.test.js src/migration/tests/ocr.test.js src/migration/tests/retrieval.test.js src/migration/tests/claude.test.js src/migration/tests/composer-io.test.js src/migration/tests/full-history.test.js src/migration/tests/chat-thread.test.js"
   },
   "keywords": [],
   "author": "",
