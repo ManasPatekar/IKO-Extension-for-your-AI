@@ -214,12 +214,18 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
   LIMIT: on sites with no bridge payload (everything but ChatGPT) only what is
   in the DOM is counted — the high-water mark softens but cannot remove
   virtualised-history under-reporting.
-- `claude-main.js`: reads `IKO.claudeBridge.latestConversation` or waits for
-  `iko-claude-conversation-updated`, converts, `countClaudeTokens` (local
-  estimate), per-model detect (`opus $15 / sonnet $3 / haiku $0.8`, all 200k) →
-  usage% + cost + health like `main.js` (was hardcoded `0%`/no cost), polls 2.5s
-  + removes legacy HUD ids. Attachments saver bundled via `claude-entry.js` —
-  Claude has 📎 Files parity with all other LLMs.
+- `claude-main.js`: reads `IKO.claudeBridge.latestConversation` — but only when
+  the payload names the open chat (`/chat/<uuid>` id, or the fetched URL inside
+  the bridge), because the bridge caches the previous chat and REPLAYS it on
+  every refresh request (that stale replay is what froze the HUD on Claude).
+  A fresh payload gives the whole conversation; otherwise the HUD falls back to
+  the live DOM through the same shared reader (`extractChatThread("claude")`)
+  and takes `max(dom, bridge, highWater)`. Live updates use the same
+  observer/throttle/URL-watcher trio as `main.js`; per-chat state resets when
+  `hostname+pathname` changes. Local chars/4 estimate (`claude-api.js`) keeps
+  the "no server required" label; per-model detect (`opus $15 / sonnet $3 /
+  haiku $0.8`, all 200k) refines usage/cost. Attachments saver bundled via
+  `claude-entry.js` — Claude has 📎 Files parity with all other LLMs.
 - `platform-detector.js`: table + pretty fallback; `main.js:detectPlatform()`
   mirrors it (bundle separation).
 
@@ -266,10 +272,15 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
 
 - `platforms.js`: 9 entries with `budget, pricePer1M, selectors, composers`.
   `matchPlatform(host)`, `allHosts()`. **Add LLM = 1 entry here.**
-- `chatgpt-source-adapter.js`: bridge → direct API → 6 DOM selectors → leaf
-  fallback (leaf-only, skips thread root, toolbar role signal, else alternate).
-  Fingerprint (`hasMain,totalNodes,mainTextLen,dataAttrs,testids,topTags,htmlSample`)
-  logged on empty. Extractor `iko-chatgpt-dom-3-fallback` → `api-1` when bridged.
+- `chatgpt-source-adapter.js`: bridge (refused when it names another
+  conversation — same guard as the HUD) → direct API (`?num_turns=1000` → plain
+  plural → singular) → 6 DOM selectors → leaf fallback (leaf-only, skips thread
+  root, toolbar role signal, else alternate) → shared `chat-thread.js` reader
+  (renamed app-shell markup, innerText-empty trees; messages tagged
+  `thread-reader:<source>`). Fingerprint
+  (`hasMain,totalNodes,mainTextLen,bodyTextLen,dataAttrs,testids,topTags,htmlSample`)
+  logged on empty; the thrown error adds `bodyLen=` and `reader: <source>/<reason>`.
+  Extractor `iko-chatgpt-dom-4-fullhistory` → `api-1` when bridged.
 - `claude-source-adapter.js`: `parseBridgeMessages` tries `chat_messages|messages|
   conversation_messages|turns|message_list|history|conversation.*|data.messages`
   (unknown shapes → `[]` → DOM path, never throw); `detectRole` covers
@@ -744,13 +755,81 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
     Harness: new `chatgpt-directapi` case (stubbed endpoint, 60 msgs vs 14
     mounted → "Full conversation", 3270 vs 3300 truth, exactly 1 fetch) — 13
     cases / 54 assertions, 19 node tests.
+48. "It should collect/display tokens while I enter a prompt and the AI answers,
+    and update per chat without refreshing on ALL AI websites" (report after
+    `5873267`). Two gaps, both in `main.js`:
+    (a) per-chat invalidation was ChatGPT-only — `lastSignature` was reset only
+        when `conversationId()` (the ChatGPT `/c/<id>` regex) changed, so on
+        Claude/Gemini/DeepSeek/… the HUD could keep the previous chat's number
+        (or its high-water mark) until a reload. `update()` now drops every piece
+        of per-chat state (`lastSignature`, `highWater`, bridge cache, endpoint
+        attempt, weak-read dedupe) whenever `conversationKey()`
+        (hostname+pathname) changes — every platform in the registry uses
+        path-based conversation URLs, so this covers them all.
+    (b) the HUD only moved on the 2 s heartbeat, so a submitted prompt, a
+        streaming answer or an SPA chat switch felt stale. `watchPage()` now
+        observes the page (`childList + characterData`, mutations under the HUD
+        itself ignored) and `scheduleUpdate()` throttle-reads at most once per
+        700 ms while changes keep arriving (leading+trailing, so a stream that
+        never pauses still updates); `watchUrl()` (300 ms) reacts to SPA
+        navigation at once; visibilitychange refreshes on tab focus. The 2 s
+        heartbeat stays as the always-there fallback.
+    (c) Claude was not covered by either fix: claude.ai runs its own bundle
+        (`claude-content.js`), which only read `claudeBridge.latestConversation`
+        — and the injected bridge caches the previous chat's conversation and
+        REPLAYS it on every REQUEST_REFRESH, so switching chats kept the old
+        number until a reload. `claude-main.js` now (1) accepts a bridge payload
+        only when it names the open chat (`/chat/<uuid>` vs the payload's
+        `uuid`/fetched URL — the client now keeps the URL too), (2) counts the
+        live DOM through the same shared reader as main.js
+        (`extractChatThread("claude")` + the chars/4 local estimate) and takes
+        `max(dom, bridge, highWater)`, and (3) shares the observer/throttle/
+        URL-watcher live-update trio.
+    Live re-counts also stopped strobing "Counting context…": the loader row is
+    now shown only while no count is on screen yet.
+    Harness: 8 new probe cases (22 total, 98 assertions): `chatgpt-stream`
+    (the answer appends in chunks; HUD read 1094 mid-stream between 1001 →
+    1435), `chatgpt-switch` + `gemini-switch` + `claude-switch` (SPA pushState
+    to a smaller chat → re-count without a reload), `chatgpt-switchempty`
+    (switch to a new chat → 0 / "Waiting for messages" without a reload),
+    `claude`/`claude-stream` (Claude DOM + live mid-stream 1224 → 1344 → 1787)
+    and `claude-stalecache` (a cached previous-chat payload on `/new` must read
+    0 / "Waiting for Claude messages"). 74 node tests unchanged.
+
+49. Same report, migration side: Prepare on a real ChatGPT chat threw "No
+    visible ChatGPT messages were found" + a fingerprint whose `<main>` was
+    pure app shell (`nodes=133 textLen=68`, only `data-app-shell-*`/
+    `data-composer-*` attributes — every message attribute renamed). Three
+    fixes in `chatgpt-source-adapter.js`, all sharing code the HUD already
+    trusts:
+    (a) the direct API fetch now mirrors the HUD: asks
+        `/backend-api/conversations/<id>?num_turns=1000` first (the plain
+        endpoint can paginate, which made Prepare fall through to a DOM it
+        could not read), then the plain plural, then the legacy singular path;
+    (b) the bridge payload is refused when it names a different conversation
+        (the bridge can still hold the previous chat — same guard as the HUD),
+        and a successful fetch updates `latestValidConversation`/`latestValidMessages`
+        so the HUD and the next Prepare need no network;
+    (c) when both the selector pass and the leaf-block pass find nothing the
+        adapter calls the shared reader (`extractChatThread("chatgpt")`) — the
+        exact code the HUD counts with — so renamed markup, shadow roots and
+        innerText-empty trees still produce a migratable thread
+        (`raw.strategy = thread-reader:<source>` + a "verify roles in preview"
+        warn).
+    When even the reader finds nothing, the thrown fingerprint now also reports
+    `bodyLen=` and a `reader: <source>/<reason>` line (e.g.
+    `reader: none/thread-too-small(68)`) so the next Copy logs paste names the
+    reason. New suite `chatgpt-source-adapter.test.js` (4 tests: app shell +
+    renamed markup migrates via the reader; empty shell reports the reader
+    reason; valid bridge payload preferred; foreign payload refused).
+    `npm test` now 78.
 
 ## 5. Build / test / run
 
 ```bash
 npm install
 node build.js        # or npm run build → dist/{content,claude-content,claude-bridge,chatgpt-bridge,migration}.js + css
-npm test             # 74 tests: 11 migration + 24 chat-thread + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 composer + 7 fullhistory… (run it, don't trust the count)
+npm test             # 78 tests: migration + chat-thread + chatgpt-adapter + fullhistory + sir/pdf/ocr/retrieval/claude/composer (run it, don't trust the count)
 npm run test:chatthread   # the Context HUD counting rules only
 ```
 
@@ -773,7 +852,7 @@ The HUD probe is the only way to test token counting without a logged-in site:
 symlink in `$HOME`), `iko-hud-repro.html` builds a synthetic conversation for a
 chosen DOM shape plus noise chrome and loads the REAL `dist/content.js`, and the
 probe compares the HUD's number against `countTokens()` of the same text in
-Node. Cases (13, 54 assertions): `chatgpt`, `gemini`, `perplexity`, `deepseek`,
+Node. Cases (22, 98 assertions): `chatgpt`, `gemini`, `perplexity`, `deepseek`,
 `generic` (article markup), `partial` (renamed markup → thread estimate),
 `chatgpt-grow` (must increase when 4 more turns arrive), `dominant` (the last
 answer holds ~86% of the text), `single` (one single-paragraph message),
@@ -781,7 +860,16 @@ answer holds ~86% of the text), `single` (one single-paragraph message),
 "Full conversation"), `chatgpt-directapi` (no payload at all — the HUD asks the
 conversation endpoint itself, exactly once), `chatgpt-shrink` (6 turns unmounted
 → count must not roll back), `partial-nomain-script` (no `<main>` + 40 KB inline
-JSON blob — the shape that read 0 in the wild).
+JSON blob — the shape that read 0 in the wild), `chatgpt-stream` (text appends
+chunk by chunk: the HUD must move mid-stream, before the answer ends),
+`chatgpt-switch`/`gemini-switch` (SPA `pushState` + swapped thread: re-count
+without a reload, including DOWN to a smaller chat), `chatgpt-switchempty`
+(switch to a brand-new chat → 0 / "Waiting for messages").
+Claude has its own bundle: `claude`, `claude-stream` and `claude-switch` load
+`dist/claude-content.js` (the test Brave is launched with
+`--host-resolver-rules="MAP claude.ai 127.0.0.1"` so the page runs as
+`http://claude.ai:8731/…`), and `claude-stalecache` proves a cached
+previous-chat bridge payload on `/new` cannot show its tokens.
 The dropdown shots exist because the native `<select>` popup never appears in a
 CDP screenshot — the themed list is real DOM, so it CAN be reviewed as an image.
 Never drive the user's real Brave (`--load-extension`); use a separate profile dir.
@@ -828,24 +916,24 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
   are dead duplicates — delete after confirming no import.
 - Token counts are local estimates (Claude chars/4, others o200k). Add localhost
   `count_tokens` proxy or per-model limit API for exact server-side counts.
-- The HUD counts only what is IN the DOM (plus, on ChatGPT, the bridge payload
-  when the page has fetched it): history a site has unmounted (virtualised) is
-  invisible to a passive reader, so very long chats can under-report. The
-  per-conversation high-water mark keeps the number from going backwards, but it
-  cannot invent turns it never saw. Migration sidesteps this by scrolling with
-  `loadAllHistory()`; doing that from the HUD would fight the user, so it stays
-  passive. Non-ChatGPT platforms have no bridge payload yet (Claude has one and
-  uses it in `claude-main.js`).
+- The HUD counts only what is IN the DOM (plus, on ChatGPT and Claude, the
+  bridge payload when the page has fetched it and it belongs to the open chat):
+  history a site has unmounted (virtualised) is invisible to a passive reader,
+  so very long chats can under-report. The per-conversation high-water mark
+  keeps the number from going backwards, but it cannot invent turns it never
+  saw. Migration sidesteps this by scrolling with `loadAllHistory()`; doing that
+  from the HUD would fight the user, so it stays passive. The other platforms
+  have no bridge payload; their DOM reading is all the HUD can see.
 - Bridge conversation parsing exists twice: `chatgpt-source-adapter.js`
   (`parseBridgeData`, rich migration shape with ids/timestamps/parents) and
   `chat-thread.js` (`extractConversationMessages`, minimal `{role, content}` for
   counting — also used by the bridge client to validate payloads). Unify when the
   adapter is next touched — the mapping walk and role filter are the same logic.
-- The whole-conversation endpoint list (`/backend-api/conversations/<id>` then
-  `/…/conversation/<id>`) is inferred from the migration adapter, not documented
-  by ChatGPT; the plural endpoint may need `?num_turns=` on some builds. The
-  "weak read" + fetch logs say which path answered (or that both 404'd), so the
-  list can be corrected from a user's Copy logs.
+- The whole-conversation endpoint list (`/backend-api/conversations/<id>?num_turns=1000`
+  → plain plural → `/…/conversation/<id>`) is inferred from observed traffic, not
+  documented by ChatGPT; the HUD and the migration adapter now try the same list.
+  The fetch logs say which path answered (or that all failed), so it can be
+  corrected from a user's Copy logs.
 - `m365.cloud.microsoft` (Copilot) and `x.com` (Grok) are in `manifest.json` but
   not in `platforms.js:hosts` — no registry selectors/budget there, so the HUD
   falls back to a hostname label and 200k/2.0 defaults.
@@ -855,8 +943,10 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
 - ChatGPT `REQUEST_REFRESH` still no-op on bridge side; relies on natural fetch + direct API.
 - `integrity.js` canonical subset vs schema drift — keep aligned.
 - Fallback roles positional when toolbar signal absent — verify in preview.
-- `checkPendingMigration` 1.5s poll + HUD 2s poll — replace with
-  `MutationObserver` + `storage.onChanged` for battery.
+- `checkPendingMigration` 1.5s poll — replace with `storage.onChanged` for
+  battery. The HUDs no longer depend on their heartbeat alone (both `main.js`
+  and `claude-main.js` read on a throttled MutationObserver + URL watcher), but
+  the 2 s / 2.5 s heartbeat stays as the fallback for unobserved mutations.
 - `postMessage("*")` + broad selectors — tighten origin + validate payload shape.
 - No e2e on real DOM; only Node unit tests + the `$HOME` CDP style harness
   (real modules, but synthetic host page). Add Playwright fixtures per LLM.
@@ -870,6 +960,8 @@ Debug: page `F12 → filter [IKO]`, `View logs → Copy logs`,
 3. Reply-compare (same prompt → 2 tabs → diff view).
 4. Auto-continuity templates per optimizer intent on migrated insert.
 5. Settings page (budget, position, theme, debug) + shortcuts (`Ctrl+Shift+M/K`).
-6. `MutationObserver` + event-driven refresh; Firefox `browser.*` shim.
+6. `MutationObserver` + event-driven refresh (done for both HUDs in entry 48;
+   remaining: `checkPendingMigration` → `storage.onChanged`); Firefox
+   `browser.*` shim.
 7. Server-optional exact counters (Anthropic/Gemini) with local fallback label.
 8. Onboarding coach marks; export PDF; onboarding → fewer support pastes.

@@ -2,6 +2,7 @@ window.IKO = window.IKO || {};
 
 window.IKO.claudeBridge = {
     latestConversation: null,
+    latestConversationUrl: "",
     latestUsage: null,
     ready: false,
 
@@ -35,6 +36,10 @@ window.addEventListener("message", event => {
     if (message.type === "CONVERSATION_DATA") {
         window.IKO.claudeBridge.latestConversation =
             message.payload?.data || null;
+        // Keep the fetched URL too: it names the conversation the payload
+        // belongs to, which is how the HUD rejects another chat's payload.
+        window.IKO.claudeBridge.latestConversationUrl =
+            message.payload?.url || "";
 
         window.dispatchEvent(
             new CustomEvent("iko-claude-conversation-updated")

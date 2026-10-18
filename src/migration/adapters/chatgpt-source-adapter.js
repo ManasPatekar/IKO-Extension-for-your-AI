@@ -1,5 +1,8 @@
 const { SourceAdapter, AdapterError } = require("./adapter-interface.js");
 const { loadAllHistory } = require("../core/full-history.js");
+// Same reader the Context HUD uses: selector pass, thread estimate, deep scan.
+// It is the safety net for app-shell DOMs whose markup we do not know.
+const chatThread = require("../core/chat-thread.js");
 
 function log(level, message, data) {
     try {
@@ -12,7 +15,8 @@ function log(level, message, data) {
 function fingerprintMain() {
     try {
         const main = document.querySelector("main");
-        if (!main) return { hasMain: false, bodyLen: (document.body?.innerText || "").length };
+        const bodyLen = (document.body?.innerText || "").length;
+        if (!main) return { hasMain: false, bodyLen };
         const all = Array.from(main.querySelectorAll("*")).slice(0, 4000);
         const dataAttrs = new Set();
         const testids = new Set();
@@ -32,6 +36,7 @@ function fingerprintMain() {
             hasMain: true,
             totalNodes: all.length,
             mainTextLen: (main.innerText || "").length,
+            bodyTextLen: bodyLen,
             dataAttrs: [...dataAttrs].slice(0, 30),
             testids: [...testids].slice(0, 30),
             topTags: Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 12),
@@ -135,24 +140,46 @@ function allKeys(data) {
     try { return Object.keys(data || {}); } catch { return []; }
 }
 
+// Same rule the HUD uses: the last path segment is a real conversation id.
+function conversationId() {
+    try {
+        const last = location.pathname.split("/").filter(Boolean).pop() || "";
+        return /^[0-9a-zA-Z-]{10,}$/.test(last) ? last : "";
+    } catch { return ""; }
+}
+
 async function tryBridge() {
     const b = globalThis.window?.IKO?.chatgptBridge;
-    if (b?.latestConversation) {
-        const parsed = parseBridgeData(b.latestConversation);
-        if (parsed?.length) {
-            log("info", `bridge yielded ${parsed.length} messages`, {});
-            return parsed;
+    const id = conversationId();
+    // Prefer the last payload that really parsed: the sidebar's chat-list
+    // shares the conversation URL prefix and overwrites latestConversation.
+    const cached = b?.latestValidConversation || b?.latestConversation;
+    if (cached) {
+        // Never migrate another conversation's payload: the bridge can still
+        // hold the previous chat while this tab shows a new one.
+        const payloadId = String(cached?.conversation_id || "").slice(0, 64);
+        if (!payloadId || !id || payloadId === id) {
+            const parsed = parseBridgeData(cached);
+            if (parsed?.length) {
+                log("info", `bridge yielded ${parsed.length} messages`, {});
+                return parsed;
+            }
+            log("warn", "bridge data present but unparsable", { keys: allKeys(cached) });
+        } else {
+            log("warn", "bridge holds another conversation — ignoring", { payloadId, id });
         }
-        log("warn", "bridge data present but unparsable", {
-            keys: allKeys(b.latestConversation)
-        });
     }
     // Direct fetch fallback: same-origin backend-api carries auth cookies.
-    // NOTE: plural /conversations/<id> is the live endpoint (singular 404s).
+    // NOTE: plural /conversations/<id> is the live endpoint (singular 404s)
+    // and ?num_turns=1000 asks for the whole thread — the plain endpoint can
+    // paginate, which is what made Prepare see "no messages" on real chats.
     try {
-        const id = location.pathname.split("/").filter(Boolean).pop();
-        if (id && id.length > 10) {
-            for (const path of [`/backend-api/conversations/${id}`, `/backend-api/conversation/${id}`]) {
+        if (id) {
+            for (const path of [
+                `/backend-api/conversations/${id}?num_turns=1000`,
+                `/backend-api/conversations/${id}`,
+                `/backend-api/conversation/${id}`
+            ]) {
                 try {
                     const r = await fetch(path, { credentials: "include" });
                     if (!r.ok) {
@@ -160,9 +187,18 @@ async function tryBridge() {
                         continue;
                     }
                     const data = await r.json();
-                    try { globalThis.window.IKO.chatgptBridge.latestConversation = data; } catch { /* ignore */ }
                     const parsed = parseBridgeData(data);
                     if (parsed?.length) {
+                        // Keep the bridge's "best payload so far" pointers in
+                        // sync so the HUD and the next Prepare need no network.
+                        try {
+                            const bridge = globalThis.window.IKO.chatgptBridge;
+                            bridge.latestConversation = data;
+                            if (parsed.length > (bridge.latestValidMessages || 0)) {
+                                bridge.latestValidConversation = data;
+                                bridge.latestValidMessages = parsed.length;
+                            }
+                        } catch { /* ignore */ }
                         log("info", `direct API (${path}) yielded ${parsed.length} messages`, {});
                         return parsed;
                     }
@@ -343,6 +379,45 @@ class ChatGPTSourceAdapter extends SourceAdapter {
             if (usedFallback) log("info", `fallback produced ${messages.length} messages`, {});
         }
 
+        // Shared reader fallback: the app-shell DOM can rename every message
+        // attribute and hide text from innerText, leaving the selector and
+        // leaf-block passes with nothing. The reader the HUD uses measures text
+        // with a DOM walk, walks to the real thread container even when <main>
+        // is just the shell, and deep-scans the page as a last resort.
+        let readerReason = "";
+        if (!messages.length) {
+            try {
+                const thread = chatThread.extractChatThread("chatgpt");
+                readerReason = `${thread.source}/${thread.reason}`;
+                if (thread.messages?.length) {
+                    log("info", `shared reader yielded ${thread.messages.length} messages`, {
+                        source: thread.source, reason: thread.reason
+                    });
+                    for (const m of thread.messages) {
+                        const t = String(m.content || "").trim();
+                        if (!t) continue;
+                        const role = m.role === "assistant" || m.role === "system" ? m.role : "user";
+                        messages.push({
+                            id: `chatgpt-thread-${messages.length + 1}`,
+                            role,
+                            sourceRole: `thread-reader:${thread.source}`,
+                            content: t.slice(0, 20000),
+                            parentId: messages.length ? messages[messages.length - 1].id : null,
+                            timestamp: null, model: null,
+                            raw: { text: t.slice(0, 20000), strategy: `thread-reader:${thread.source}`, threadReason: thread.reason }
+                        });
+                    }
+                    try {
+                        window.IKO?.logger?.warn?.("ChatGPT-extract", "Extracted via shared thread reader — verify roles in preview", {
+                            source: thread.source, reason: thread.reason
+                        });
+                    } catch { /* ignore */ }
+                }
+            } catch (e) {
+                log("warn", "shared reader failed", { error: String(e?.message || e).slice(0, 200) });
+            }
+        }
+
         if (!messages.length) {
             let diag = {};
             try { diag = globalThis.window?.IKO?.logger?.diagnostics?.() || {}; } catch { /* ignore */ }
@@ -350,7 +425,8 @@ class ChatGPTSourceAdapter extends SourceAdapter {
             log("error", "extract failed", { diag, fp: { ...fp, mainHtmlSample: String(fp.mainHtmlSample || "").slice(0, 800) } });
             throw new AdapterError(
                 "No visible ChatGPT messages were found. I logged a DOM fingerprint — open 'View logs' → 'Copy logs' and paste it so I can add your exact markup.\n\n" +
-                `finger: main=${fp.hasMain} nodes=${fp.totalNodes ?? "?"} textLen=${fp.mainTextLen ?? "?"} data=[${(fp.dataAttrs || []).join(",")}]`
+                `finger: main=${fp.hasMain} nodes=${fp.totalNodes ?? "?"} textLen=${fp.mainTextLen ?? "?"} bodyLen=${fp.bodyTextLen ?? "?"} data=[${(fp.dataAttrs || []).join(",")}]` +
+                (readerReason ? `\nreader: ${readerReason}` : "")
             );
         }
 
@@ -366,7 +442,7 @@ class ChatGPTSourceAdapter extends SourceAdapter {
             log("info", `using API data (${apiMessages.length} messages)`, {});
             return {
                 platform: "chatgpt",
-                conversationId: location.pathname.split("/").filter(Boolean).pop() || `chatgpt-${Date.now()}`,
+                conversationId: conversationId() || `chatgpt-${Date.now()}`,
                 title: document.title || "ChatGPT Conversation",
                 model: null, createdAt: null, updatedAt: null,
                 extractorVersion: "iko-chatgpt-api-1",
@@ -381,7 +457,7 @@ class ChatGPTSourceAdapter extends SourceAdapter {
 
         return {
             platform: "chatgpt",
-            conversationId: location.pathname.split("/").filter(Boolean).pop() || `chatgpt-${Date.now()}`,
+            conversationId: conversationId() || `chatgpt-${Date.now()}`,
             title: document.title || "ChatGPT Conversation",
             model: null, createdAt: null, updatedAt: null,
             extractorVersion: "iko-chatgpt-dom-4-fullhistory",

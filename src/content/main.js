@@ -81,10 +81,11 @@ let bridgeCache = { payload: null, messages: [], tokens: -1, initialized: false 
 // opposite of the truth ("less context in use"). Keep the largest count seen
 // for this conversation; starting or switching chats resets it.
 let highWater = { key: "", tokens: 0 };
-// The bridge holds whatever conversation the page last fetched — when the user
-// starts a new chat its payload can still belong to the previous one, so track
-// the id and reset everything when the chat changes.
-let lastConvoId = "";
+// Identity of the open conversation on *any* site, not just ChatGPT: host +
+// path. Every change means a different chat, so the signature cache, the
+// bridge payload and the endpoint attempt must all be dropped — otherwise the
+// HUD can keep showing the previous chat's number until the extension reloads.
+let lastKey = "";
 
 // A same-origin fetch of the conversation endpoint never downgrades a payload
 // that already holds more messages (bridge payload included).
@@ -257,19 +258,18 @@ function update() {
 
     const info = platformInfo();
 
+    // Every site: a different host+path is a different conversation. Drop all
+    // per-chat state (signature cache, high-water mark, bridge payload,
+    // endpoint attempt) so the HUD re-counts the new chat immediately instead
+    // of showing the previous one until the extension is reloaded.
     const key = conversationKey();
-    if (highWater.key !== key) highWater = { key, tokens: 0 };
-
-    // ChatGPT keeps its own copy of the last opened chat in the bridge; a new
-    // chat must not inherit its count (invalidated inside bridgeMessages), and
-    // any in-flight endpoint attempt must be restarted for this conversation.
-    // Invalidate the signature cache so the HUD re-counts instead of showing
-    // the previous chat's number until the extension is reloaded.
-    const id = conversationId();
-    if (id && id !== lastConvoId) {
-        lastConvoId = id;
+    if (key !== lastKey) {
+        lastKey = key;
         lastSignature = "";
+        lastDiagnostic = "";
+        bridgeCache = { payload: null, messages: [], tokens: -1, initialized: false };
         remoteAttempt = { id: "", at: 0, pending: false };
+        highWater = { key, tokens: 0 };
     }
 
     let messages = [];
@@ -319,7 +319,12 @@ function update() {
 
     counting = true;
     try {
-        window.IKO.ui.setLoading(true, "Counting context…");
+        // Live updates re-count every few hundred ms while a prompt is sent and
+        // an answer streams; flashing "Counting context…" each time would make
+        // the HUD strobe. Only show the loader while no count is on screen yet.
+        const hasCount = Boolean(window.IKO.latestData &&
+            (window.IKO.latestData.tokens > 0 || window.IKO.latestData.messageCount > 0));
+        if (!hasCount) window.IKO.ui.setLoading(true, "Counting context…");
         try {
             const domTokens = messages.reduce(
                 (total, message) => total + countTokens(message.content.slice(0, MAX_MESSAGE_CHARS)),
@@ -376,12 +381,82 @@ function update() {
     }
 }
 
+// --- live updates -------------------------------------------------------------
+// Chat pages mutate constantly: the submitted prompt lands, the answer streams
+// token by token, the sidebar re-renders. A 2 s heartbeat feels stale in those
+// moments (and a chat switch can wait a whole tick), so the page itself drives
+// extra reads — throttled while a stream is running. Every read still goes
+// through the signature cache, so idle ticks stay cheap.
+let observer = null;
+let domTimer = null;
+let domLast = 0;
+let urlTimer = null;
+let lastHref = location.href;
+
+const IKO_UI_SELECTOR = "#iko-context-hud, #iko-bot, #iko-optimizer-panel, #iko-optimizer-launcher";
+
+// The HUD writes to the page too; its own mutations must not drive a re-read
+// (and the HUD lives outside <body>, so observing <body> already excludes it —
+// this is belt and braces for panels that mount inside it).
+function isOwnUi(target) {
+    const el = target?.nodeType === 1 ? target : target?.parentElement;
+    return typeof el?.closest === "function" && !!el.closest(IKO_UI_SELECTOR);
+}
+
+// Leading+trailing throttle: at most one automatic read per 700 ms while the
+// page keeps changing, and the last change always gets counted. Without the
+// trailing part a long stream that never pauses would starve the HUD.
+function scheduleUpdate(delay = 700) {
+    if (domTimer) return;
+    const wait = Math.max(0, delay - (Date.now() - domLast));
+    domTimer = setTimeout(() => {
+        domTimer = null;
+        domLast = Date.now();
+        update();
+    }, wait);
+}
+
+function watchPage() {
+    if (typeof MutationObserver !== "function") return;
+    if (observer) observer.disconnect();
+    observer = new MutationObserver((records) => {
+        // Hidden tabs still stream; there is nobody to show it to.
+        if (document.hidden) return;
+        for (const record of records) {
+            if (isOwnUi(record.target)) continue;
+            scheduleUpdate();
+            return;
+        }
+    });
+    observer.observe(document.body || document.documentElement, {
+        childList: true,
+        subtree: true,
+        characterData: true
+    });
+}
+
+// SPA chat switches change the URL before the new conversation renders; react
+// at once instead of waiting for the heartbeat or a DOM mutation.
+function watchUrl() {
+    clearInterval(urlTimer);
+    urlTimer = setInterval(() => {
+        if (location.href === lastHref) return;
+        lastHref = location.href;
+        update();
+    }, 300);
+}
+
 function initialize() {
     console.log("[IKO ChatGPT] Context HUD initializing");
     window.IKO.ui.create();
     update();
     clearInterval(timer);
     timer = setInterval(update, 2000);
+    watchPage();
+    watchUrl();
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) update();
+    });
 }
 
 if (document.readyState === "loading") {
