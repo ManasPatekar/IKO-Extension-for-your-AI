@@ -333,19 +333,36 @@ function extractChatThread(platformId) {
     if (messages.length) return { messages, source: "selectors", reason: "selector-match" };
 
     // No selector matched anything — this is either a brand-new/empty chat or a
-    // site whose markup we don't know. Accept a whole-thread estimate only when
-    // the text is substantial enough to be a real conversation; a welcome/hero
-    // screen ("Where should we begin?", feature tiles) is short marketing text
-    // and must read as "waiting", not as usage.
-    if (messages.length === 0 && container?.el) {
+    // site whose markup we don't know. The thread container may be a small app
+    // shell whose real conversation lives outside <main> (e.g. ChatGPT's 2026
+    // app shell moves the thread to a sibling or a portal). When the container
+    // is too small but the page holds far more text elsewhere, deep-scan the
+    // whole page instead of giving up. A welcome screen (short hero text, all
+    // inside <main>) is rejected: it has no ≥2 message-sized blocks.
+    let estimate = null;
+    if (container?.el) {
         const threadChars = container.chars || textLength(container.el);
-        if (threadChars < THREAD_MIN_CHARS) {
-            return { messages: [], source: "none", reason: `thread-too-small(${threadChars})` };
+        const bodyText = textLength(document.body || document.documentElement);
+
+        // App shell: small <main>, conversation lives outside it (body has far
+        // more text). Skip the thread estimate and deep-scan the page.
+        if (threadChars < THREAD_MIN_CHARS && bodyText > threadChars * 3 && bodyText >= THREAD_MIN_CHARS) {
+            // fall through to deepScan below
+        } else {
+            estimate = fromThread(container);
+            if (estimate.messages.length) {
+                // When no selectors matched at all and the container is small,
+                // require ≥2 message-sized blocks so a single hero block doesn't
+                // pass as a conversation. Large containers (≥ THREAD_MIN_CHARS)
+                // are trusted as-is (a real single-message thread).
+                if (threadChars >= THREAD_MIN_CHARS || blockCount(container.el) >= 2) {
+                    return { messages: estimate.messages, source: "thread", reason: estimate.reason };
+                }
+                return { messages: [], source: "none", reason: `thread-too-small(${threadChars})` };
+            }
+            return { messages: [], source: "none", reason: estimate?.reason || `thread-too-small(${threadChars})` };
         }
     }
-
-    const estimate = fromThread(container);
-    if (estimate.messages.length) return { messages: estimate.messages, source: "thread", reason: estimate.reason };
 
     // Last resort: deep-scan the page for the largest text block that looks
     // like a conversation container (covers sites whose DOM we know nothing
@@ -358,7 +375,7 @@ function extractChatThread(platformId) {
         }
     }
 
-    return { messages: [], source: "none", reason: estimate.reason || "no-container" };
+    return { messages: [], source: "none", reason: estimate?.reason || "no-container" };
 }
 
 // --- deep scan fallback -------------------------------------------------------
