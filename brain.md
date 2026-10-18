@@ -735,6 +735,12 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
         `conversation_id` must match the pathname), and the HUD treats a
         conversation-id mismatch as "no conversation yet". Stale sidebar /
         chat-list payloads can no longer freeze a number onto a fresh chat.
+    (e) a brand-new / empty chat (no selectors matched, thread text under
+        THREAD_MIN_CHARS ≈ 400 chars) is NOT counted as a conversation — a
+        welcome/hero screen ("Where should we begin?" + feature tiles) now
+        returns "none" → 0 tokens / "Waiting for messages" instead of a stale
+        or welcome-screen number. Real conversations easily exceed 400 chars,
+        so they're still counted via the thread estimate.
     Harness: new `chatgpt-directapi` case (stubbed endpoint, 60 msgs vs 14
     mounted → "Full conversation", 3270 vs 3300 truth, exactly 1 fetch) — 13
     cases / 54 assertions, 19 node tests.
@@ -744,7 +750,7 @@ src/migration/adapters/mock-source-adapter.js + mock/mock-session.js + tests/mig
 ```bash
 npm install
 node build.js        # or npm run build → dist/{content,claude-content,claude-bridge,chatgpt-bridge,migration}.js + css
-npm test             # 69 tests: 11 migration + 19 chat-thread + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 composer + 7 fullhistory… (run it, don't trust the count)
+npm test             # 74 tests: 11 migration + 24 chat-thread + 7 sir + 4 pdf + 5 ocr + 6 retrieval + 5 claude + 5 composer + 7 fullhistory… (run it, don't trust the count)
 npm run test:chatthread   # the Context HUD counting rules only
 ```
 

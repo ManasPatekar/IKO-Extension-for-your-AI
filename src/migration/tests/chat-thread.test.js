@@ -415,8 +415,9 @@ test("readText pierces shadow DOM", () => {
 test("short messages are backtracked to the message list, not walked into", () => {
     const main = node("main");
     const list = node("div", { attrs: { id: "message-list" } });
-    // Each message is short (<120 chars), so no single block triggers looksLikeList.
-    for (let i = 1; i <= 6; i++) {
+    // Each message is short (<120 chars), so no single block triggers
+    // looksLikeList, but the whole thread is substantial (>400 chars).
+    for (let i = 1; i <= 20; i++) {
         list.appendChild(node("msg-body", { text: `Message ${i}: short turn text here.` }));
     }
     main.appendChild(list);
@@ -426,7 +427,7 @@ test("short messages are backtracked to the message list, not walked into", () =
     const result = extractChatThread("unknown-site");
     assert.equal(result.source, "thread");
     assert.equal(result.messages.length, 1);
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 20; i++) {
         assert.ok(result.messages[0].content.includes(`Message ${i}:`), `missing message ${i}`);
     }
 });
@@ -461,6 +462,27 @@ test("a page with no conversation at all still returns none", () => {
     const result = extractChatThread("chatgpt");
     assert.equal(result.source, "none");
     assert.equal(result.messages.length, 0);
+});
+
+test("a new-chat welcome screen is not counted as a conversation", () => {
+    // ChatGPT's empty chat shows a hero + short feature tiles (~270 chars
+    // total — the 67 tokens seen on a blank chat) and no messages at all.
+    // That must read as "waiting", not as usage.
+    const hero = node("div", { text: "Where should we begin?" });
+    const tiles = node("div");
+    tiles.appendChild(node("div", { text: "Create an image or sticker Generate images, stickers, and other visuals with DALL·E." }));
+    tiles.appendChild(node("div", { text: "Write or edit Draft emails, essays, code, and more — then refine as you go." }));
+    tiles.appendChild(node("div", { text: "Search the web Get up-to-date information from across the internet." }));
+    const main = node("main");
+    main.appendChild(hero);
+    main.appendChild(tiles);
+
+    installDom({ main, selectors: {} });
+
+    const result = extractChatThread("chatgpt");
+    assert.equal(result.source, "none");
+    assert.equal(result.messages.length, 0);
+    assert.match(result.reason, /thread-too-small/);
 });
 
 // ---------------------------------------------------------------------------

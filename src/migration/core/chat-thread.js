@@ -332,6 +332,18 @@ function extractChatThread(platformId) {
     }
     if (messages.length) return { messages, source: "selectors", reason: "selector-match" };
 
+    // No selector matched anything — this is either a brand-new/empty chat or a
+    // site whose markup we don't know. Accept a whole-thread estimate only when
+    // the text is substantial enough to be a real conversation; a welcome/hero
+    // screen ("Where should we begin?", feature tiles) is short marketing text
+    // and must read as "waiting", not as usage.
+    if (messages.length === 0 && container?.el) {
+        const threadChars = container.chars || textLength(container.el);
+        if (threadChars < THREAD_MIN_CHARS) {
+            return { messages: [], source: "none", reason: `thread-too-small(${threadChars})` };
+        }
+    }
+
     const estimate = fromThread(container);
     if (estimate.messages.length) return { messages: estimate.messages, source: "thread", reason: estimate.reason };
 
@@ -351,9 +363,10 @@ function extractChatThread(platformId) {
 
 // --- deep scan fallback -------------------------------------------------------
 // When nothing else works, scan the page for the element with the most text
-// that is not chrome (nav/aside/header/footer/script/style) and contains at
-// least two substantial blocks. This is slow, so it only runs when both the
-// selector path and the thread estimate have failed.
+// that is not chrome (nav/aside/header/footer/script/style). This is slow, so
+// it only runs when both the selector path and the thread estimate have failed.
+// Depth and thresholds are generous: real ChatGPT DOMs can nest the conversation
+// deep, and individual message bubbles can be small even when the thread is long.
 function deepScanContainer() {
     const root = document.body || document.documentElement;
     if (!root) return null;
@@ -366,18 +379,16 @@ function deepScanContainer() {
         return out;
     };
     const walk = (node, depth) => {
-        if (depth > 4) return;
+        if (depth > 10) return;
         for (const child of elementChildren(node)) {
             if (!child.tagName || NOISE_TAGS.has(child.tagName) || CHROME_TAGS.has(child.tagName)) continue;
             const len = textLength(child);
-            if (len >= 150) {
-                const blocks = blockCount(child);
-                const score = len + blocks * 100;
+            if (len >= 50) {
+                const score = len;
                 if (score > bestScore) {
                     bestScore = score;
-                    best = { el: child, reason: `blocks=${blocks} chars=${len}` };
+                    best = { el: child, reason: `chars=${len}` };
                 }
-                // Keep descending — a deeper, more specific container is better.
                 walk(child, depth + 1);
             } else {
                 walk(child, depth + 1);

@@ -263,9 +263,12 @@ function update() {
     // ChatGPT keeps its own copy of the last opened chat in the bridge; a new
     // chat must not inherit its count (invalidated inside bridgeMessages), and
     // any in-flight endpoint attempt must be restarted for this conversation.
+    // Invalidate the signature cache so the HUD re-counts instead of showing
+    // the previous chat's number until the extension is reloaded.
     const id = conversationId();
     if (id && id !== lastConvoId) {
         lastConvoId = id;
+        lastSignature = "";
         remoteAttempt = { id: "", at: 0, pending: false };
     }
 
